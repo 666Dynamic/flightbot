@@ -1,0 +1,80 @@
+[
+  {
+    "query": "wyszukaj mi loty z Polski do Filipin najtańsze",
+    "reply": "✈️ PL → PH · następne 30 dni\njedna strona · bez limitu ceny (PLN) · maks. 4 przesiadki\n1 dorosły · economy · bez dodatkowego bagażu\n\n1. 1422 PLN — Etihad Airways 10:30 - 09:55 +1 18.11.2026 16h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n2. 1422 PLN — Etihad Airways 10:30 - 09:55 +1 17.11.2026 16h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n3. 1424 PLN — Etihad Airways 10:30 - 09:55 +1 23.11.2026 16h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n4. 1529 PLN — Qatar Airways 14:40 - 15:25 +1 17.11.2026 17h 45m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n5. 1529 PLN — Qatar Airways 09:00 - 15:25 +1 18.11.2026 23h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\nCena może się zmienić przed rezerwacją. Samodzielne przesiadki wyłączone.",
+    "buttons": {
+      "inline_keyboard": [
+        [
+          {
+            "text": "🔔 Obserwuj te loty",
+            "callback_data": "watch:f42142284b98e97f8dc27db2"
+          }
+        ],
+        [
+          {
+            "text": "🔎 Wszystkie wyniki Flightlist",
+            "url": "https://www.flightlist.io/?to=PH&trip=oneway&depart_from=2026-10-27&depart_to=2026-11-25&adults=1&children=0&infants=0&hand_bags=0&hold_bags=0&cabin=M&sort=price&limit=100&depart_time=any&arrive_time=any&self_transfer=0&stops=4&from=PL"
+          }
+        ],
+        [
+          {
+            "text": "📋 Moje obserwacje",
+            "callback_data": "list"
+          }
+        ]
+      ]
+    }
+  },
+  {
+    "query": "najtańsze loty z Warszawy do Manili",
+    "reply": "✈️ city:WAW → city:MNL · następne 30 dni\njedna strona · bez limitu ceny (PLN) · maks. 4 przesiadki\n1 dorosły · economy · bez dodatkowego bagażu\n\n1. 1332 PLN — Etihad Airways 10:30 - 21:55 +1 03.11.2026 28h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n2. 1422 PLN — Etihad Airways 10:30 - 09:55 +1 18.11.2026 16h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n3. 1422 PLN — Etihad Airways 10:30 - 09:55 +1 17.11.2026 16h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n4. 1424 PLN — Etihad Airways 10:30 - 09:55 +1 23.11.2026 16h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\n5. 1443 PLN — Etihad Airways 10:30 - 09:55 +1 13.11.2026 16h 25m Warsaw (WAW) → Manila (MNL) 1 przesiadka\n\nLimit 100 wyników — to nie jest pełna lista wszystkich lotów.\nCena może się zmienić przed rezerwacją. Samodzielne przesiadki wyłączone.",
+    "buttons": {
+      "inline_keyboard": [
+        [
+          {
+            "text": "🔔 Obserwuj te loty",
+            "callback_data": "watch:d45af0d7cb3a747fe9b82dfe"
+          }
+        ],
+        [
+          {
+            "text": "🔎 Wszystkie wyniki Flightlist",
+            "url": "https://www.flightlist.io/?to=city%3AMNL&trip=oneway&depart_from=2026-10-27&depart_to=2026-11-25&adults=1&children=0&infants=0&hand_bags=0&hold_bags=0&cabin=M&sort=price&limit=100&depart_time=any&arrive_time=any&self_transfer=0&stops=4&from=city%3AWAW"
+          }
+        ],
+        [
+          {
+            "text": "📋 Moje obserwacje",
+            "callback_data": "list"
+          }
+        ]
+      ]
+    }
+  },
+  {
+    "query": "z Gdańska do Hamburga",
+    "reply": "✈️ city:GDN → city:HAM · następne 30 dni\njedna strona · bez limitu ceny (PLN) · maks. 4 przesiadki\n1 dorosły · economy · bez dodatkowego bagażu\n\n1. 105 PLN — Ryanair 12:55 - 14:20 20.11.2026 1h 25m Gdańsk (GDN) → Hamburg (HAM) bez przesiadek\n\n2. 143 PLN — Ryanair 12:55 - 14:20 13.11.2026 1h 25m Gdańsk (GDN) → Hamburg (HAM) bez przesiadek\n\n3. 171 PLN — Wizz Air 11:35 - 13:00 18.11.2026 1h 25m Gdańsk (GDN) → Hamburg (HAM) bez przesiadek\n\n4. 171 PLN — Wizz Air 15:45 - 17:10 20.11.2026 1h 25m Gdańsk (GDN) → Hamburg (HAM) bez przesiadek\n\n5. 173 PLN — Wizz Air 15:45 - 17:10 13.11.2026 1h 25m Gdańsk (GDN) → Hamburg (HAM) bez przesiadek\n\nLimit 100 wyników — to nie jest pełna lista wszystkich lotów.\nCena może się zmienić przed rezerwacją. Samodzielne przesiadki wyłączone.",
+    "buttons": {
+      "inline_keyboard": [
+        [
+          {
+            "text": "🔔 Obserwuj te loty",
+            "callback_data": "watch:47b521b33f9334bf0fa6f7f6"
+          }
+        ],
+        [
+          {
+            "text": "🔎 Wszystkie wyniki Flightlist",
+            "url": "https://www.flightlist.io/?to=city%3AHAM&trip=oneway&depart_from=2026-10-27&depart_to=2026-11-25&adults=1&children=0&infants=0&hand_bags=0&hold_bags=0&cabin=M&sort=price&limit=100&depart_time=any&arrive_time=any&self_transfer=0&stops=4&from=city%3AGDN"
+          }
+        ],
+        [
+          {
+            "text": "📋 Moje obserwacje",
+            "callback_data": "list"
+          }
+        ]
+      ]
+    }
+  }
+]

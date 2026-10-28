@@ -1,0 +1,22 @@
+[Unit]
+Description=Flightbot Telegram (Flightlist)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=flightbot
+Group=flightbot
+Environment=FLIGHTBOT_STATE=/opt/flightbot/state
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -u /opt/flightbot/app/connect.py run
+Restart=always
+RestartSec=30
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/flightbot/state
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
