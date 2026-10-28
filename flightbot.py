@@ -142,6 +142,9 @@ def parse_results(html, search_url=BASE, expected_currency=None):
     region = regions[0]
     counts = [re.search(r"^(\d+) flights? found$", n.text()) for n in region.find("h2")]
     counts = [m for m in counts if m]
+    if not counts and not region.find("li") and any(n.text() == "No flights found" for n in region.find("strong")):
+        # Explicit empty state from the provider, not an error page.
+        return Result([], 0, search_url, datetime.now(timezone.utc).isoformat(), False)
     if not counts:
         # Fail closed: an empty/error page is not an empty flight search.
         raise ProviderError("Nie rozpoznano liczby wyników; stan monitorów zachowany.")
@@ -219,7 +222,9 @@ COUNTRIES = {"polski":"PL","polska":"PL","poland":"PL", "niemiec":"DE","niemcy":
              "tajlandii":"TH","tajlandia":"TH","thailand":"TH", "hiszpanii":"ES","hiszpania":"ES",
              "włoch":"IT","wlochy":"IT","włochy":"IT","portugalii":"PT","portugalia":"PT"}
 COUNTRIES.update({"filipin":"PH","filipiny":"PH","philippines":"PH","manili":"MNL","manila":"MNL","japonii":"JP","japonia":"JP","tokio":"TYO","wietnamu":"VN","wietnam":"VN","malezji":"MY","malezja":"MY","indonezji":"ID","indonezja":"ID","bali":"DPS"})
-HELP = """✈️ Napisz po prostu:
+HELP = """🧭 /kreator — wyszukiwanie krok po kroku na przyciskach.
+
+✈️ Albo napisz po prostu:
 „Najtańsze loty z Polski do Filipin”
 „Wyszukaj mi loty z Warszawy do Manili”
 „Z Gdańska do Hamburga”
@@ -478,6 +483,9 @@ def parse_command(text, provider=None):
     if command == "/lista":
         return "list", None
 
+    if command in ("/kreator", "/nowe") or text.lower() in ("kreator", "nowe wyszukiwanie"):
+        return "wizard", None
+
     if command == "/usun" and len(parts) == 2:
         try:
             return "delete", int(parts[1])
@@ -712,7 +720,8 @@ def describe_search(spec):
     trip=f"tam i z powrotem · {spec.nights_from}–{spec.nights_to} nocy" if spec.nights_from else "jedna strona"
     budget=f"do {spec.budget} {spec.currency}" if spec.budget else f"bez limitu ceny ({spec.currency})"
     stops="bez przesiadek" if spec.stops==0 else ("maks. 1 przesiadka" if spec.stops==1 else f"maks. {spec.stops} przesiadki")
-    period=f"{spec.start} – {spec.end}" if spec.start else f"następne {spec.days} dni"
+    pl=lambda iso:date.fromisoformat(iso).strftime("%d.%m.%Y")
+    period=f"{pl(spec.start)} – {pl(spec.end)}" if spec.start else f"następne {spec.days} dni"
     def label(code,name):
         known={"PL":"Polska","PH":"Filipiny","TH":"Tajlandia","DE":"Niemcy","ES":"Hiszpania","IT":"Włochy","JP":"Japonia","VN":"Wietnam","MY":"Malezja","ID":"Indonezja"}
         return name or known.get(code,code.removeprefix("city:"))
@@ -723,7 +732,7 @@ def search_identity(spec):
 
 class Reply(str):
     def __new__(cls,text,markup=None):
-        value=super().__new__(cls,text);value.markup=markup;return value
+        value=super().__new__(cls,text);value.markup=markup;value.edit=False;value.edit_id=None;return value
 
 def keyboard(*rows):return {"inline_keyboard":list(rows)}
 def button(text,data):return {"text":text,"callback_data":data}
@@ -739,13 +748,23 @@ class Store:
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS actions(token TEXT PRIMARY KEY, owner TEXT NOT NULL, spec TEXT NOT NULL, expires INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS place_requests(token TEXT PRIMARY KEY,owner TEXT NOT NULL,data TEXT NOT NULL,expires INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS wizards(owner TEXT PRIMARY KEY,data TEXT NOT NULL,expires INTEGER NOT NULL);
 
         """)
         if "active" not in [r[1] for r in self.db.execute("PRAGMA table_info(watches)")]:
             self.db.execute("ALTER TABLE watches ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
         if "markup" not in [r[1] for r in self.db.execute("PRAGMA table_info(outbox)")]:
             self.db.execute("ALTER TABLE outbox ADD COLUMN markup TEXT")
+        if "edit_id" not in [r[1] for r in self.db.execute("PRAGMA table_info(outbox)")]:
+            self.db.execute("ALTER TABLE outbox ADD COLUMN edit_id INTEGER")
         self.db.commit()
+    def wizard_get(self,owner):
+        row=self.db.execute("SELECT data FROM wizards WHERE owner=? AND expires>=?",(owner,int(time.time()))).fetchone()
+        return json.loads(row[0]) if row else None
+    def wizard_set(self,owner,data):
+        with self.db:self.db.execute("INSERT OR REPLACE INTO wizards VALUES(?,?,?)",(owner,json.dumps(data),int(time.time())+86400))
+    def wizard_clear(self,owner):
+        with self.db:self.db.execute("DELETE FROM wizards WHERE owner=?",(owner,))
     def place_request(self,owner,spec,intent,field,choices):
         token=secrets.token_hex(10)
         data={"spec":asdict(spec),"intent":intent,"field":field,"choices":choices}
@@ -804,7 +823,7 @@ class Store:
             found=self.db.execute("UPDATE watches SET active=0 WHERE owner=? AND id=? AND active=1",(owner,wid)).rowcount
         return found
     def enqueue(self,owner,body):
-        self.db.execute("INSERT INTO outbox(owner,body,markup) VALUES(?,?,?)",(owner,str(body),json.dumps(body.markup) if getattr(body,"markup",None) else None))
+        self.db.execute("INSERT INTO outbox(owner,body,markup,edit_id) VALUES(?,?,?,?)",(owner,str(body),json.dumps(body.markup) if getattr(body,"markup",None) else None,getattr(body,"edit_id",None)))
     def scan(self, provider):
         errors=[]
         for row in self.watches():
@@ -843,13 +862,195 @@ def render(result,spec):
     offers=[o for o in result.offers if not spec.budget or Decimal(o.price)<=Decimal(spec.budget)]
     lines=["✈️ "+describe_search(spec), "1 dorosły · economy · bez dodatkowego bagażu", ""]
     lines.extend(f"{i}. {offer_line(o)}\n" for i,o in enumerate(offers[:5],1))
-    if not offers: lines.append("Brak ofert w budżecie w otrzymanym zestawie wyników.")
+    if not result.count: lines.append("Brak lotów dla tych filtrów. Spróbuj szerszych dat, większej liczby przesiadek albo całego kraju/regionu.\n")
+    elif not offers: lines.append("Brak ofert w budżecie w otrzymanym zestawie wyników.")
     if result.truncated: lines.append("Limit 100 wyników — to nie jest pełna lista wszystkich lotów.")
     lines.extend(["Cena może się zmienić przed rezerwacją. Samodzielne przesiadki wyłączone.", result.url])
     return "\n".join(lines)
 
+# Step-by-step search form. Buttons carry the field they set ("wz:<field>:<value>"),
+# so pressing an older button in the same message cannot corrupt another step.
+WIZARD_ORIGINS=[("Polska","PL"),("Warszawa","city:WAW"),("Kraków","city:KRK"),("Gdańsk","city:GDN"),
+                ("Katowice","city:KTW"),("Wrocław","city:WRO"),("Poznań","city:POZ"),("Berlin","city:BER")]
+WIZARD_DESTINATIONS=[("🌍 Europa","europe"),("🌏 Azja","asia"),("Hiszpania","ES"),("Włochy","IT"),
+                     ("Grecja","GR"),("Portugalia","PT"),("Tajlandia","TH"),("Filipiny","PH")]
+WIZARD_NIGHTS=["2-4","3-5","5-8","7-10","10-14","14-21"]
+WIZARD_BUDGETS=["300","500","1000","2000","3000","5000"]
+WIZARD_STEPS=["origin","destination","when","trip","nights","stops","budget","summary"]
+WIZARD_TEXT_STEPS={"origin","destination","when","nights","budget"}
+# Typed Polish country names (and Bali, which the provider matches to Balikpapan).
+WIZARD_KNOWN={norm_place(k):v for k,v in COUNTRIES.items() if len(v)==2 or k=="bali"}
+WIZARD_FIELDS={"o":"origin","d":"destination","w":"when","t":"trip","n":"nights","s":"stops","b":"budget"}
+
+def wizard_new():
+    return {"step":"origin","edit":False,"origin":"","origin_name":"","destination":"","destination_name":"",
+            "days":30,"start":"","end":"","trip":"","nights_from":0,"nights_to":0,"stops":4,"budget":"","choices":[]}
+
+def wizard_next(data,field):
+    if field=="trip" and data["nights_from"]==0 and data.get("trip")=="return":return "nights"
+    if data["edit"]:return "summary"
+    i=WIZARD_STEPS.index(field)+1
+    if WIZARD_STEPS[i]=="nights" and data.get("trip")!="return":i+=1
+    return WIZARD_STEPS[i]
+
+def wizard_prev(data):
+    i=WIZARD_STEPS.index(data["step"])-1
+    if i>=0 and WIZARD_STEPS[i]=="nights" and data.get("trip")!="return":i-=1
+    return WIZARD_STEPS[max(i,0)]
+
+def wizard_spec(data):
+    return Search(data["origin"],data["destination"],days=data["days"],budget=data["budget"],stops=data["stops"],
+                  start=data["start"],end=data["end"],currency="PLN",nights_from=data["nights_from"],
+                  nights_to=data["nights_to"],origin_name=data["origin_name"],destination_name=data["destination_name"])
+
+def next_month(today=None):
+    today=today or datetime.now(TZ).date()
+    first=(today.replace(day=1)+timedelta(days=32)).replace(day=1)
+    last=(first+timedelta(days=32)).replace(day=1)-timedelta(days=1)
+    return first.isoformat(),last.isoformat()
+
+def parse_date_range(text,today=None):
+    today=today or datetime.now(TZ).date()
+    m=re.fullmatch(r"\s*(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)\s*[-–]\s*(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)\s*",text)
+    if not m:raise ValueError("Wpisz daty jako od-do, np. 10.12-20.12 albo 10.12.2026-05.01.2027.")
+    try:start,end=(date.fromisoformat(parse_flexible_date(x)) for x in m.groups())
+    except ValueError:raise ValueError("Nieprawidłowa data. Przykład: 10.12-20.12.") from None
+    if end<start and not re.search(r"\d[./]\d{2,4}$",m[2]):end=end.replace(year=end.year+1)
+    if start<today:raise ValueError("Data wylotu jest w przeszłości.")
+    if end<start or (end-start).days>179:raise ValueError("Zakres dat: koniec po początku, maks. 180 dni.")
+    return start.isoformat(),end.isoformat()
+
+def looks_like_sentence(text):
+    low=text.casefold()
+    return bool(re.match(r"(loty|lot|wyszukaj|szukaj|pokaż|pokaz|znajdź|znajdz|najtańsze|najtansze|obserwuj)\b",low)
+                or re.search(r"\b(z|ze)\s+\S+.*\bdo\s+\S+",low))
+
 class Bot:
     def __init__(self,provider,store): self.provider,self.store=provider,store
+    def wizard_prompt(self,data,note=""):
+        step=data["step"];nav=[button("⬅️ Wstecz","wz:back"),button("✖️ Anuluj","wz:x")]
+        def grid(items,field,cols=2):
+            buttons=[button(label,f"wz:{field}:{value}") for label,value in items]
+            return [buttons[i:i+cols] for i in range(0,len(buttons),cols)]
+        if data["choices"]:
+            label="miejsce wylotu" if step=="origin" else "cel podróży"
+            rows=[[button(o["text"][:55],f"wz:pick:{i}")] for i,o in enumerate(data["choices"])]
+            text=f"Które {label} masz na myśli?"
+        elif step=="origin":
+            text="🧭 Krok 1/6 · Skąd lecisz?\nWybierz poniżej albo wpisz miasto, lotnisko lub kraj.";rows=grid(WIZARD_ORIGINS,"o")
+            nav=[nav[1]]
+        elif step=="destination":
+            text="🧭 Krok 2/6 · Dokąd?\nWybierz albo wpisz miasto, kraj lub region (np. Bali, Skandynawia).";rows=grid(WIZARD_DESTINATIONS,"d")
+        elif step=="when":
+            text="🧭 Krok 3/6 · Kiedy wylot?\nMożesz też wpisać daty, np. 10.12-20.12."
+            rows=grid([("Najbliższe 30 dni","30"),("Najbliższe 60 dni","60"),("Najbliższe 90 dni","90"),("Przyszły miesiąc","next")],"w")
+        elif step=="trip":
+            text="🧭 Krok 4/6 · W jedną stronę czy tam i z powrotem?"
+            rows=grid([("➡️ W jedną stronę","oneway"),("🔁 Tam i z powrotem","return")],"t")
+        elif step=="nights":
+            text="🧭 Krok 4/6 · Ile nocy na miejscu?\nMożesz też wpisać zakres, np. 6-9."
+            rows=grid([(f"{n} nocy",n) for n in WIZARD_NIGHTS],"n",3)
+        elif step=="stops":
+            text="🧭 Krok 5/6 · Przesiadki?"
+            rows=grid([("Tylko bezpośrednie","0"),("Maks. 1","1"),("Maks. 2","2"),("Obojętnie","4")],"s")
+        elif step=="budget":
+            text="🧭 Krok 6/6 · Maksymalna cena za osobę (PLN)?\nMożesz też wpisać kwotę."
+            rows=[[button("Bez limitu","wz:b:0")]]+grid([(f"{b} zł",b) for b in WIZARD_BUDGETS],"b",3)
+        else:
+            text="🧭 Podsumowanie\n"+describe_search(wizard_spec(data))+"\n\nZmień dowolny filtr albo szukaj."
+            rows=[[button("🔎 Szukaj lotów","wz:go")],
+                  [button("✏️ Skąd","wz:ed:origin"),button("✏️ Dokąd","wz:ed:destination"),button("✏️ Kiedy","wz:ed:when")],
+                  [button("✏️ Typ/pobyt","wz:ed:trip"),button("✏️ Przesiadki","wz:ed:stops"),button("✏️ Budżet","wz:ed:budget")]]
+            nav=[nav[1]]
+        reply=Reply((note+"\n\n" if note else "")+text,keyboard(*rows,nav));reply.edit=True
+        return reply
+    def wizard_start(self,owner,data=None):
+        data=data or wizard_new();self.store.wizard_set(owner,data)
+        reply=self.wizard_prompt(data);reply.edit=False;return reply
+    def wizard_place(self,data,field,code,name):
+        data[field],data[field+"_name"],data["choices"]=code,name,[]
+        data["step"]=wizard_next(data,field)
+    def wizard_set(self,data,field,value):
+        if field in ("origin","destination"):
+            names=dict((v,k) for k,v in WIZARD_ORIGINS+WIZARD_DESTINATIONS)
+            if value not in names:raise ValueError("Nieznane miejsce.")
+            self.wizard_place(data,field,value,names[value].lstrip("🌍🌏 "));return
+        if field=="when":
+            if value=="next":data["start"],data["end"]=next_month()
+            elif value in ("30","60","90"):data["start"],data["end"],data["days"]=("","",int(value))
+            else:raise ValueError("Nieznany termin.")
+        elif field=="trip":
+            if value not in ("oneway","return"):raise ValueError("Nieznany typ podróży.")
+            data["trip"]=value
+            if value=="oneway":data["nights_from"]=data["nights_to"]=0
+        elif field=="nights":
+            m=re.fullmatch(r"\s*(\d{1,2})\s*[-–]\s*(\d{1,2})\s*",value)
+            if not m or not 1<=int(m[1])<=int(m[2])<=90:raise ValueError("Pobyt wpisz jako min-max nocy, np. 6-9 (1–90).")
+            data["trip"],data["nights_from"],data["nights_to"]="return",int(m[1]),int(m[2])
+        elif field=="stops":
+            if value not in ("0","1","2","4"):raise ValueError("Nieznana liczba przesiadek.")
+            data["stops"]=int(value)
+        elif field=="budget":
+            value=value.replace(" ","").replace(",",".").lower().removesuffix("zł").removesuffix("pln")
+            if value=="0":data["budget"]=""
+            else:
+                try:amount=Decimal(value)
+                except ArithmeticError:raise ValueError("Wpisz kwotę w PLN, np. 1500.") from None
+                if not amount.is_finite() or not 0<amount<=1_000_000:raise ValueError("Wpisz kwotę w PLN, np. 1500.")
+                data["budget"]=format(amount.normalize(),"f")
+        data["step"]=wizard_next(data,field)
+    def wizard_callback(self,owner,value):
+        data=self.store.wizard_get(owner)
+        if value=="new" or (data is None and value=="edit"):return self.wizard_start(owner)
+        if data is None:return Reply("Kreator wygasł. Zacznij od nowa.",keyboard([button("🧭 Nowe wyszukiwanie","wz:new")]))
+        if value=="edit":
+            data.update(step="summary",edit=True,choices=[]);return self.wizard_start(owner,data)
+        if value=="x":
+            self.store.wizard_clear(owner)
+            reply=Reply("Anulowano kreator.",keyboard([button("🧭 Nowe wyszukiwanie","wz:new")]));reply.edit=True;return reply
+        note=""
+        try:
+            if value=="back":
+                if data["choices"]:data["choices"]=[]
+                else:data["step"]=wizard_prev(data) if not data["edit"] else "summary"
+            elif value.startswith("ed:"):
+                step=value[3:]
+                if step not in WIZARD_STEPS[:-1]:raise ValueError("Nieznany krok.")
+                data.update(step=step,edit=True,choices=[])
+                if step=="trip":data["nights_from"]=data["nights_to"]=0
+            elif value.startswith("pick:"):
+                choice=data["choices"][int(value[5:])]
+                self.wizard_place(data,data["step"],choice["value"],choice["text"][:120])
+            elif value=="go":
+                spec=wizard_spec(data);result=self.provider.search(spec)
+                data["edit"]=True;self.store.wizard_set(owner,data)
+                reply=self.results_reply(owner,spec,result)
+                reply.markup["inline_keyboard"].insert(1,[button("🔁 Zmień filtry","wz:edit")]);reply.edit=True
+                return reply
+            else:
+                field,_,arg=value.partition(":")
+                if field not in WIZARD_FIELDS:raise ValueError("Nieznany przycisk.")
+                self.wizard_set(data,WIZARD_FIELDS[field],arg)
+        except (ValueError,IndexError,ArithmeticError,ProviderError) as e:note="⚠️ "+str(e)
+        self.store.wizard_set(owner,data)
+        return self.wizard_prompt(data,note)
+    def wizard_text(self,owner,data,text):
+        note="";step=data["step"]
+        try:
+            if step in ("origin","destination"):
+                known=WIZARD_KNOWN.get(norm_place(text))
+                resolved,choices=(known,[]) if known else location_choices(self.provider,text)
+                if choices:data["choices"]=choices[:6]
+                else:
+                    name=("" if known else getattr(self.provider,"place_labels",{}).get(resolved,"")) or text.strip()[:120].capitalize()
+                    self.wizard_place(data,step,resolved,name)
+                    note=f"✅ {'Skąd' if step=='origin' else 'Dokąd'}: {name}"
+            elif step=="when":
+                data["start"],data["end"]=parse_date_range(text);data["step"]=wizard_next(data,"when")
+            else:self.wizard_set(data,step,text)
+        except (ValueError,ArithmeticError,ProviderError) as e:note="⚠️ "+str(e)
+        self.store.wizard_set(owner,data)
+        reply=self.wizard_prompt(data,note);reply.edit=False;return reply
     def request_reply(self,owner,intent,spec):
         fields=asdict(spec)
         for field in ("origin","destination"):
@@ -887,6 +1088,7 @@ class Bot:
         try:
             if data=="list":return self.list_reply(owner)
             action,value=data.split(":",1)
+            if action=="wz":return self.wizard_callback(owner,value)
             if action=="place":
                 token,index=value.split(":",1)
                 request,intent=self.store.choose_place(owner,token,int(index))
@@ -912,8 +1114,12 @@ class Bot:
     def handle(self,owner,text):
         try:
             if len(text) > 1000: raise ValueError("Polecenie za długie (maks. 1000 znaków).")
+            wizard=self.store.wizard_get(owner)
+            if wizard and wizard["step"] in WIZARD_TEXT_STEPS and not text.startswith("/") and not looks_like_sentence(text):
+                return self.wizard_text(owner,wizard,text)
             action,arg=parse_command(text, self.provider)
-            if action=="help":return Reply(HELP,keyboard([button("📋 Moje obserwacje","list")]))
+            if action=="wizard":return self.wizard_start(owner)
+            if action=="help":return Reply(HELP,keyboard([button("🧭 Kreator wyszukiwania","wz:new")],[button("📋 Moje obserwacje","list")]))
             if action=="locations":
                 return "\n".join(f"{x['value']} — {x['text']} ({x.get('type','?')})" for x in self.provider.locations(arg)) or "Brak lokalizacji."
             if action=="list":return self.list_reply(owner)
@@ -927,17 +1133,30 @@ class Bot:
             return self.results_reply(owner,arg,result)
         except (ValueError,ProviderError,ArithmeticError) as e:return "Nie udało się: "+str(e)
 
+class TelegramRejected(RuntimeError):
+    def __init__(self,description=""):super().__init__("Telegram odrzucił żądanie.");self.description=str(description)[:200]
+
 class Telegram:
     def __init__(self,token): self.token=token
     def call(self,method,payload):
         req=Request(f"https://api.telegram.org/bot{self.token}/{method}",data=json.dumps(payload).encode(),headers={"Content-Type":"application/json"})
         try:
             with urlopen(req,timeout=40) as response: result=json.load(response)
+        except HTTPError as e:
+            # 4xx carries a JSON {"ok":false,"description":...}; the URL is not included.
+            try:result=json.load(e)
+            except Exception:raise RuntimeError("Błąd transportu Telegram; wiadomości pozostają w kolejce.") from None
         except Exception:
             # Never log exceptions containing the token-bearing URL.
             raise RuntimeError("Błąd transportu Telegram; wiadomości pozostają w kolejce.") from None
-        if not result.get("ok"): raise RuntimeError("Telegram odrzucił żądanie.")
+        if not result.get("ok"):
+            if result.get("error_code")==429:raise RuntimeError("Telegram: limit zapytań; ponowienie później.")
+            raise TelegramRejected(result.get("description",""))
         return result["result"]
+    def edit(self,owner,message_id,text):
+        payload={"chat_id":owner,"message_id":message_id,"text":str(text)[:4000],"link_preview_options":{"is_disabled":True}}
+        if getattr(text,"markup",None):payload["reply_markup"]=text.markup
+        return self.call("editMessageText",payload)
     def send(self,owner,text):
         # Plain text: untrusted provider names cannot inject Telegram HTML.
         payload={"chat_id":owner,"text":str(text)[:4000],"link_preview_options":{"is_disabled":True}}
@@ -946,7 +1165,18 @@ class Telegram:
 
 def flush(store,telegram):
     for row in store.db.execute("SELECT * FROM outbox ORDER BY id").fetchall():
-        telegram.send(row["owner"],Reply(row["body"],json.loads(row["markup"]) if row["markup"] else None))
+        reply=Reply(row["body"],json.loads(row["markup"]) if row["markup"] else None)
+        try:
+            if row["edit_id"]:
+                try:telegram.edit(row["owner"],row["edit_id"],reply)
+                except TelegramRejected as e:
+                    # Same content clicked twice: nothing to change. Otherwise (deleted or
+                    # too old message) fall back to a new message.
+                    if "not modified" not in e.description:telegram.send(row["owner"],reply)
+            else:telegram.send(row["owner"],reply)
+        except TelegramRejected as e:
+            # A rejected message would block the queue forever; drop it and log why.
+            print(json.dumps({"outbox_dropped":row["id"],"reason":e.description},ensure_ascii=False),flush=True)
         with store.db: store.db.execute("DELETE FROM outbox WHERE id=?",(row["id"],))
 
 def process_updates(bot, updates, allowed, offset, telegram=None):
@@ -961,10 +1191,13 @@ def process_updates(bot, updates, allowed, offset, telegram=None):
         reply=None
         if callback and owner in allowed and chat.get("type")=="private" and str(callback.get("from",{}).get("id",""))==owner:
             if telegram:
-                try:telegram.call("answerCallbackQuery",{"callback_query_id":callback["id"]})
+                answer={"callback_query_id":callback["id"]}
+                if callback.get("data")=="wz:go":answer["text"]="Szukam lotów…"
+                try:telegram.call("answerCallbackQuery",answer)
                 except RuntimeError:pass
             data=callback.get("data","")
             if isinstance(data,str) and len(data)<=64:reply=bot.callback(owner,data)
+            if getattr(reply,"edit",False):reply.edit_id=msg.get("message_id")
         if not callback and owner in allowed and chat.get("type")=="private" and isinstance(msg.get("text"),str):
             reply=bot.handle(owner,msg["text"])
         with store.db:

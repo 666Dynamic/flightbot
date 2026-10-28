@@ -1,0 +1,189 @@
+<div data-search-region="results" class="mt-8 empty:hidden" aria-live="polite">                                                                                                                                                                                                                                                                                                                                                                                
+            
+
+
+<div class="flex gap-3 rounded-xl border p-4 text-sm border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200" role="status" >
+    <i class="bi bi-info-circle-fill mt-0.5 shrink-0" aria-hidden="true"></i>
+            <p><strong class="font-semibold">No flights found</strong> — Try a wider date range, allow more stops, or search from a whole country or region instead of one airport.</p>
+    </div>
+    </div>
+<div data-search-region="airlines" class="lg:col-span-4">
+    <div data-controller="dropdown airline-filter"
+     data-action="mouseenter->dropdown#hoverOpen mouseleave->dropdown#hoverClose keydown.esc->dropdown#close focusout->dropdown#focusOut"
+     data-airline-filter-all-value="All selected (__count__)"
+     data-airline-filter-some-value="__count__ selected"
+     data-airline-filter-none-value="None selected"
+     class="relative">
+    <input type="hidden" id="airlines" name="airlines" data-airline-filter-target="input" data-refine="true" class="mt-1.5 block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-xs placeholder:text-gray-400 focus:border-blue-600 focus:ring-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
+    <span id="airline-filter-label" class="mb-1 flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">Select Airlines         <span class="group relative inline-flex" tabindex="0">
+        <i class="bi bi-info-circle-fill text-xs text-gray-400" aria-hidden="true" ></i>
+
+        <span role="tooltip" class="pointer-events-none absolute bottom-full start-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus:opacity-100 motion-reduce:transition-none rtl:translate-x-1/2 dark:bg-gray-700">The airlines in your results. Untick an airline to hide every flight that uses it.</span>
+    </span>
+</span>
+    <button type="button" class="block w-full min-w-0 border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:z-10 focus:border-blue-600 focus:ring-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 flex items-center justify-between gap-2 rounded-lg text-start disabled:cursor-not-allowed disabled:bg-gray-50 dark:disabled:bg-gray-800"
+            data-dropdown-target="button" data-action="dropdown#toggle keydown.down->dropdown#openAndFocus"
+            aria-expanded="false" aria-controls="airline-filter-menu" aria-labelledby="airline-filter-label airline-filter-summary"
+            >
+        <span id="airline-filter-summary" class="truncate" data-airline-filter-target="summary">All selected (29)</span>
+        <i class="bi bi-chevron-down text-xs text-gray-500" aria-hidden="true" ></i>
+
+    </button>
+
+            <div id="airline-filter-menu" class="absolute end-0 top-full z-30 w-full min-w-64 pt-2" data-dropdown-target="menu" hidden>
+            <div class="max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                <label class="flex cursor-pointer items-center gap-2 border-b border-gray-200 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+                    <input type="checkbox" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="all" data-action="airline-filter#toggleAll" checked>
+                    Select all
+                </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="G9" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/G9.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Air Arabia</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="AK" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/AK.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">AirAsia</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="CA" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/CA.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Air China</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="OS" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/OS.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Austrian Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="MU" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/MU.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">China Eastern Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="CZ" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/CZ.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">China Southern Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="QG" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/QG.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Citilink</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="U2" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/U2.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">easyJet</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="EK" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/EK.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Emirates</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="EY" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/EY.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Etihad Airways</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="AY" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/AY.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Finnair</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="GA" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/GA.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Garuda Indonesia</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="HU" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/HU.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Hainan Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="KL" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/KL.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">KLM Royal Dutch Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="JT" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/JT.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Lion Air</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="LO" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/LO.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">LOT Polish Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="LH" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/LH.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Lufthansa</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="N0" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/N0.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Norse Atlantic Airways</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="IP" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/IP.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Pelita Air</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="QR" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/QR.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Qatar Airways</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="FR" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/FR.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Ryanair</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="SK" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/SK.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">SAS</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="TR" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/TR.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Scoot</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="SQ" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/SQ.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Singapore Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="GQ" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/GQ.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">SKY express</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="IU" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/IU.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Super Air Jet</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="TG" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/TG.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Thai Airways</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="TK" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/TK.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Turkish Airlines</span>
+                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <input type="checkbox" value="W6" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-900" data-airline-filter-target="option" data-action="airline-filter#update" checked>
+                        <img src="https://images.kiwi.com/airlines/64/W6.png" alt="" width="20" height="20" loading="lazy" class="size-5 rounded">
+                        <span class="truncate">Wizz Air</span>
+                    </label>
+                            </div>
+        </div>
+    </div>
+
+</div>
+

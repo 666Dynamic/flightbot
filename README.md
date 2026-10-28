@@ -11,6 +11,10 @@ Bot Telegram z wyszukiwaniem i obserwacjami Flightlist. Python 3.9+, biblioteka 
 - Daty w formacie dd.mm.rrrr, godziny 24h i czytelna lista monitorów.
 - Wyszukiwanie zwykłymi zdaniami po polsku, z rozpoznawaniem miejsc i przyciskami doprecyzowania; to parser wzorców, nie pełny asystent AI.
 
+## Kreator krok po kroku
+
+`/kreator` (też w menu bota i pod `/help`) prowadzi przyciskami: skąd → dokąd → kiedy → jedna strona / tam i z powrotem (+ liczba nocy) → przesiadki → budżet w PLN → podsumowanie. Na każdym kroku można zamiast przycisku wpisać własną wartość: miasto, kraj lub region (np. „Bali”, „Skandynawia”), daty `10.12-20.12`, pobyt `6-9`, kwotę `1500`. Kreator edytuje jedną wiadomość zamiast wysyłać nowe. W podsumowaniu każdy filtr można zmienić osobno; pod wynikami jest „🔁 Zmień filtry”. Stan kreatora trzymany jest 24 h w tabeli `wizards`. Zwykłe zdania („loty z Warszawy do Rzymu”) działają także w trakcie kreatora.
+
 ## Przyciski
 
 Pod nowymi wynikami są przyciski **Obserwuj te loty**, **Wszystkie wyniki Flightlist** i **Moje obserwacje**. Po zapisaniu obserwacji można nacisnąć **Sprawdź teraz**, **Usuń** lub wyświetlić listę. „Sprawdź teraz” pomija cache klienta, ale serwer Flightlist może nadal korzystać z własnej pamięci wyników. Sprawdzenie na żądanie pokazuje wyniki i nie przestawia bazy porównawczej automatycznych alertów.
