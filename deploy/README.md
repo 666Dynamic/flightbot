@@ -27,3 +27,13 @@ ssh chmura 'sudo -u flightbot sqlite3 /opt/flightbot/state/state.sqlite3 ".backu
 1. Skopiuj `telegram.json` i `state.sqlite3` do `/opt/flightbot/state` (właściciel `flightbot`, 600).
 2. Skopiuj kod do `/opt/flightbot/app` i `flightbot.service` do `/etc/systemd/system/`.
 3. Zatrzymaj starą instancję, potem `sudo systemctl enable --now flightbot`. Nigdy dwie naraz.
+
+## Wdrożenie kreatora 29.10.2026
+
+Kod `4fec578` wdrożono do `/opt/flightbot/app/flightbot.py`; SHA256 `5baa9cb42740d1ea8c07a927fd610857e26a18e7f7b4e0c8f115a964312cb437`. Systemd po restarcie: active. Kopia kodu i SQLite: `/opt/flightbot/backups/button-wizard-20261029T122421Z` (root, katalog700, baza600). Stan obserwacji zachowany: #1 wyłączona, #2 wyłączona, #3 aktywna.
+
+Samo `ssh chmura` nie korzysta tu z konfiguracji. Działająca konfiguracja na Macu:
+`/Users/lukas/Documents/Codex/2026-10-25/referenced-chatgpt-conversation-this-is-an/work/ssh-cloud.conf`
+Użycie: `rtk proxy ssh -F /pełna/ścieżka/ssh-cloud.conf chmura ...`. Plik wskazuje użytkownika ubuntu, prywatny adres Tailscale, plik klucza i właściwy known_hosts; weryfikacja klucza pozostaje włączona. Nie kopiować sekretów do repo.
+
+Log produkcji potwierdził powtarzające się HTTP403 wyszukiwarki Flightlist od 28.10. Formularz po błędzie zachowuje filtry i udostępnia bezpośredni link. Działanie usługi nie jest równoznaczne z dostępnością ofert.
