@@ -230,6 +230,13 @@ COUNTRIES = {"polski":"PL","polska":"PL","poland":"PL", "niemiec":"DE","niemcy":
              "tajlandii":"TH","tajlandia":"TH","thailand":"TH", "hiszpanii":"ES","hiszpania":"ES",
              "włoch":"IT","wlochy":"IT","włochy":"IT","portugalii":"PT","portugalia":"PT"}
 COUNTRIES.update({"filipin":"PH","filipiny":"PH","philippines":"PH","manili":"MNL","manila":"MNL","japonii":"JP","japonia":"JP","tokio":"TYO","wietnamu":"VN","wietnam":"VN","malezji":"MY","malezja":"MY","indonezji":"ID","indonezja":"ID","bali":"DPS"})
+COUNTRIES.update({"finlandia":"FI","finland":"FI","szwecja":"SE","norwegia":"NO","dania":"DK",
+                  "francja":"FR","grecja":"GR","czechy":"CZ","austria":"AT","szwajcaria":"CH",
+                  "chorwacja":"HR","cypr":"CY","malta":"MT","irlandia":"IE","islandia":"IS",
+                  "holandia":"NL","belgia":"BE","węgry":"HU","rumunia":"RO","bułgaria":"BG",
+                  "litwa":"LT","łotwa":"LV","estonia":"EE","słowacja":"SK","słowenia":"SI",
+                  "turcja":"TR","egipt":"EG","maroko":"MA","usa":"US","stany zjednoczone":"US",
+                  "wielka brytania":"GB","kanada":"CA","australia":"AU","europa":"europe","azja":"asia"})
 HELP = """Oferty: Kiwi.com. Wybierz filtry przyciskami.
 
 ✈️ /start — zacznij wyszukiwanie przyciskami.
@@ -615,10 +622,10 @@ def render(result,spec):
 
 # Step-by-step search form. Buttons carry the field they set ("wz:<field>:<value>"),
 # so pressing an older button in the same message cannot corrupt another step.
-WIZARD_ORIGINS=[("Polska","PL"),("Warszawa","city:WAW"),("Kraków","city:KRK"),("Gdańsk","city:GDN"),
+WIZARD_ORIGINS=[("Polska","PL"),("Niemcy","DE"),("Europa","europe"),("Warszawa","city:WAW"),("Gdańsk","city:GDN"),("Berlin","city:BER"),
+                ("Kraków","city:KRK"),
                 ("Katowice","city:KTW"),("Wrocław","city:WRO"),("Poznań","city:POZ"),("Berlin","city:BER")]
-WIZARD_DESTINATIONS=[("🌍 Europa","europe"),("🌏 Azja","asia"),("Hiszpania","ES"),("Włochy","IT"),
-                     ("Grecja","GR"),("Portugalia","PT"),("Tajlandia","TH"),("Filipiny","PH")]
+WIZARD_DESTINATIONS=[("Europa","europe"),("Hiszpania","ES"),("Włochy","IT"),("Tajlandia","TH"),("Filipiny","PH"),("Manila","city:MNL"),("Polska","PL")]
 WIZARD_NIGHTS=["2-4","3-5","5-8","7-10","10-14","14-21"]
 WIZARD_BUDGETS=["300","500","1000","2000","3000","5000"]
 WIZARD_ORIGINS += [("Łódź","city:LCJ"),("Szczecin","city:SZZ"),("Rzeszów","city:RZE"),("Lublin","city:LUZ"),
@@ -631,12 +638,12 @@ WIZARD_DESTINATIONS += [("Manila","city:MNL"),("Bangkok","city:BKK"),("Bali (Den
 WIZARD_STEPS=["trip","origin","destination","when","nights","stops","budget","summary"]
 WIZARD_TEXT_STEPS={"origin","destination","when","nights","budget"}
 # Typed Polish country names (and Bali, which the provider matches to Balikpapan).
-WIZARD_KNOWN={norm_place(k):v for k,v in COUNTRIES.items() if len(v)==2 or k=="bali"}
+WIZARD_KNOWN={norm_place(k):v for k,v in COUNTRIES.items() if len(v)==2 or k in ("bali","europa","azja")}
 WIZARD_FIELDS={"o":"origin","d":"destination","w":"when","t":"trip","n":"nights","s":"stops","b":"budget"}
 
 def wizard_new():
     return {"version":2,"page":0,"input":False,"step":"trip","edit":False,"origin":"","origin_name":"","destination":"","destination_name":"",
-            "days":30,"start":"","end":"","trip":"","nights_from":0,"nights_to":0,"stops":4,"budget":"","choices":[]}
+            "days":30,"start":"","end":"","trip":"","nights_from":0,"nights_to":0,"stops":4,"budget":"","currency":"PLN","choices":[]}
 
 def wizard_next(data,field):
     if data["edit"] and field=="trip" and data["nights_from"]==0 and data.get("trip")=="return":return "nights"
@@ -656,7 +663,7 @@ def wizard_spec(data):
     if data["origin"] == data["destination"]:raise ValueError("Wybierz różne miejsca wylotu i przylotu.")
     if data["trip"] == "return" and not data["nights_from"]:raise ValueError("Wybierz długość pobytu.")
     return Search(data["origin"],data["destination"],days=data["days"],budget=data["budget"],stops=data["stops"],
-                  start=data["start"],end=data["end"],currency="PLN",nights_from=data["nights_from"],
+                  start=data["start"],end=data["end"],currency=data.get("currency","PLN"),nights_from=data["nights_from"],
                   nights_to=data["nights_to"],origin_name=data["origin_name"],destination_name=data["destination_name"])
 
 def next_month(today=None):
@@ -704,14 +711,15 @@ def looks_like_sentence(text):
 class Bot:
     def __init__(self,provider,store): self.provider,self.store=provider,store
     def wizard_prompt(self,data,note=""):
-        step=data["step"];nav=[button("⬅️ Wstecz","wz:back"),button("✖️ Anuluj","wz:x")]
+        step=data["step"];currency=data.get("currency","PLN");nav=[button("⬅️ Wstecz","wz:back"),button("✖️ Anuluj","wz:x")]
         def grid(items,field,cols=2):
             buttons=[button(label,f"wz:{field}:{value}") for label,value in items]
             return [buttons[i:i+cols] for i in range(0,len(buttons),cols)]
         if data.get("input"):
-            labels={"origin":"miasto, lotnisko lub kraj wylotu", "destination":"miasto, kraj lub region docelowy",
-                    "when":"daty wylotu, np. 10.12-20.12", "nights":"zakres nocy, np. 6-9", "budget":"kwotę w PLN, np. 1500"}
-            text="✍️ Wpisz tylko "+labels[step]+".\nMożesz też wrócić do przycisków."
+            labels={"origin":"nazwę miejsca wylotu, np. Polska, Finlandia albo Warszawa", "destination":"nazwę celu podróży, np. Filipiny albo Manila",
+                    "when":"daty wylotu, np. 10.12-20.12", "nights":"zakres nocy, np. 6-9", "budget":f"kwotę w {currency}, np. 1500"}
+            text="✍️ Wpisz tylko "+labels[step]+"."
+            nav[0]=button("⬅️ Wróć do wyboru","wz:back")
             rows=[]
         elif data["choices"]:
             label="miejsce wylotu" if step=="origin" else "cel podróży"
@@ -720,14 +728,9 @@ class Bot:
         elif step in ("origin","destination"):
             catalog=WIZARD_ORIGINS if step=="origin" else WIZARD_DESTINATIONS
             field="o" if step=="origin" else "d"
-            page=max(0,min(data.get("page",0),(len(catalog)-1)//8))
             title="Skąd lecisz?" if step=="origin" else "Dokąd lecisz?"
-            text=f"🧭 Krok {2 if step=='origin' else 3}/{7 if data['trip']=='return' else 6} · {title}\nWybierz miasto, cały kraj lub region. Strona {page+1}/{(len(catalog)+7)//8}."
-            rows=grid(catalog[page*8:(page+1)*8],field)
-            pages=[]
-            if page:pages.append(button("◀️ Poprzednie miejsca",f"wz:page:{page-1}"))
-            if (page+1)*8<len(catalog):pages.append(button("Więcej miejsc ▶️",f"wz:page:{page+1}"))
-            if pages:rows.append(pages)
+            text=f"🧭 Krok {2 if step=='origin' else 3}/{7 if data['trip']=='return' else 6} · {title}\nWybierz miejsce lub kliknij Inne miejsce."
+            rows=grid(catalog[:6],field)
             rows.append([button("🔎 Inne miejsce","wz:custom")])
         elif step=="when":
             text=f"🧭 Krok 4/{7 if data['trip']=='return' else 6} · Kiedy wylot?"
@@ -745,15 +748,18 @@ class Bot:
             text=f"🧭 Krok {6 if data['trip']=='return' else 5}/{7 if data['trip']=='return' else 6} · Przesiadki?"
             rows=grid([("Tylko bezpośrednie","0"),("Maks. 1","1"),("Maks. 2","2"),("Obojętnie","4")],"s")
         elif step=="budget":
-            text=f"🧭 Krok {7 if data['trip']=='return' else 6}/{7 if data['trip']=='return' else 6} · Maksymalna cena za osobę (PLN)?"
-            rows=[[button("Bez limitu","wz:b:0")]]+grid([(f"{b} zł",b) for b in WIZARD_BUDGETS],"b",3)
+            text=f"🧭 Krok {7 if data['trip']=='return' else 6}/{7 if data['trip']=='return' else 6} · Budżet za osobę?\nWaluta: {currency}"
+            rows=[[button(("✓ " if c==currency else "")+c,"wz:c:"+c) for c in ("PLN","EUR","USD")]]
+            amounts=WIZARD_BUDGETS if currency=="PLN" else ["100","200","300","500","1000","2000"]
+            rows+=[[button("Bez limitu","wz:b:0")]]+grid([(f"{b} {'zł' if currency=='PLN' else currency}",b) for b in amounts],"b",3)
             rows.append([button("✍️ Własna kwota","wz:custom")])
         else:
             text="🧭 Podsumowanie\n"+describe_search(wizard_spec(data))+"\n1 dorosły · economy · bez dodatkowego bagażu\n\nSprawdź filtry i naciśnij Szukaj lotów."
             rows=[[button("🔎 Szukaj lotów","wz:go")],
                   [button("✏️ Skąd","wz:ed:origin"),button("✏️ Dokąd","wz:ed:destination"),button("✏️ Kiedy","wz:ed:when")],
                   [button("✏️ Typ/pobyt","wz:ed:trip"),button("✏️ Przesiadki","wz:ed:stops"),button("✏️ Budżet","wz:ed:budget")]]
-            nav=[nav[1]]
+        if data.get("edit") and step!="summary" and not data.get("input") and not data["choices"]:
+            nav[0]=button("⬅️ Podsumowanie","wz:back")
         token=data.get("token", "")
         for row in rows+[nav]:
             for item in row:
@@ -791,12 +797,18 @@ class Bot:
             if value not in ("0","1","2","4"):raise ValueError("Nieznana liczba przesiadek.")
             data["stops"]=int(value)
         elif field=="budget":
-            value=value.replace(" ","").replace(",",".").lower().removesuffix("zł").removesuffix("pln")
+            value=value.replace(" ","").replace(",",".").lower()
+            currency=data.get("currency","PLN")
+            suffix=re.search(r"(pln|eur|usd|zł|€|\$)$",value)
+            if suffix:
+                entered={"zł":"PLN","€":"EUR","$":"USD"}.get(suffix[1],suffix[1].upper())
+                if entered!=currency:raise ValueError(f"Wybrana waluta to {currency}. Zmień ją przyciskiem lub wpisz samą kwotę.")
+                value=value[:suffix.start()]
             if value=="0":data["budget"]=""
             else:
                 try:amount=Decimal(value)
-                except ArithmeticError:raise ValueError("Wpisz kwotę w PLN, np. 1500.") from None
-                if not amount.is_finite() or not 0<amount<=1_000_000:raise ValueError("Wpisz kwotę w PLN, np. 1500.")
+                except ArithmeticError:raise ValueError(f"Wpisz kwotę w {currency}, np. 1500.") from None
+                if not amount.is_finite() or not 0<amount<=1_000_000:raise ValueError(f"Wpisz kwotę w {currency}, np. 1500.")
                 data["budget"]=format(amount.normalize(),"f")
         data.update(page=0,input=False,choices=[])
         data["step"]=wizard_next(data,field)
@@ -824,21 +836,27 @@ class Bot:
             if value=="custom":
                 if data["step"] not in WIZARD_TEXT_STEPS:raise ValueError("W tym kroku wybierz przycisk.")
                 data.update(input=True,choices=[],page=0)
-            elif value.startswith("page:"):
-                if data["step"] not in ("origin","destination") or data.get("input") or data["choices"]:
-                    raise ValueError("Nieaktualna strona miejsc.")
-                page=int(value[5:]);catalog=WIZARD_ORIGINS if data["step"]=="origin" else WIZARD_DESTINATIONS
-                if not 0<=page<=(len(catalog)-1)//8:raise ValueError("Nieprawidłowa strona miejsc.")
-                data["page"]=page
+            elif value.startswith("c:"):
+                currency=value[2:]
+                if data["step"]!="budget" or currency not in ("PLN","EUR","USD"):
+                    raise ValueError("Wybierz walutę w kroku Budżet.")
+                if currency!=data.get("currency","PLN"):data["budget"]=""
+                data.update(currency=currency,input=False,choices=[])
             elif value=="back":
                 if data.get("input"):data["input"]=False
                 elif data["choices"]:data["choices"]=[]
-                else:data["step"]=wizard_prev(data) if not data["edit"] else "summary"
+                elif data["step"]=="summary":data.update(step="budget",edit=False)
+                elif data["edit"]:
+                    previous=data.pop("before_edit",None)
+                    if previous:data.update(previous)
+                    data.update(step="summary",edit=False)
+                else:data["step"]=wizard_prev(data)
                 data["page"]=0
             elif value.startswith("ed:"):
                 step=value[3:]
                 if step not in WIZARD_STEPS[:-1]:raise ValueError("Nieznany krok.")
                 if data["step"] != "summary":raise ValueError("Najpierw dokończ aktualny krok.")
+                data["before_edit"]={k:v for k,v in data.items() if k not in ("before_edit","token")}
                 data.update(step=step,edit=True,choices=[],page=0,input=False)
             elif value.startswith("pick:"):
                 index=int(value[5:])
@@ -964,8 +982,9 @@ class Bot:
             wizard=self.store.wizard_get(owner)
             if wizard and not text.startswith("/"):
                 if wizard.get("version") != 2:return self.wizard_start(owner)
-                if wizard.get("input"):
+                if wizard.get("input") or wizard["step"] in ("origin","destination"):
                     return self.wizard_text(owner,wizard,text)
+                self.store.wizard_set(owner,wizard)
                 reply=self.wizard_prompt(wizard,"Wybierz przycisk poniżej. Aby wpisać własną wartość, najpierw wybierz odpowiedni przycisk „Inne” lub „Własne”.")
                 reply.edit=False
                 return reply

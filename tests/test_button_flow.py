@@ -31,16 +31,19 @@ class ButtonFlow(unittest.TestCase):
     def test_return_entire_flow_no_typing(self):
         self.flow(True);self.press('Szukaj lotów');spec=self.p.specs[-1]
         self.assertEqual((spec.params()['trip'],spec.nights_from,spec.nights_to),('return',10,14))
-    def test_places_pagination_preserves_selection(self):
-        self.press('W jedną stronę');self.press('Więcej miejsc');self.press('Łódź')
-        self.press('Więcej miejsc');self.press('Manila');self.assertEqual(self.s.wizard_get('42')['destination'],'city:MNL')
+    def test_short_places_list_and_custom(self):
+        self.press('W jedną stronę')
+        labels=[b['text'] for row in self.r.markup['inline_keyboard'] for b in row]
+        self.assertTrue(all(x in labels for x in ('Polska','Niemcy','Europa')))
+        self.assertFalse(any('Więcej' in x for x in labels))
+        self.press('Inne miejsce');self.r=self.b.handle('42','Finlandia')
+        self.assertEqual(self.s.wizard_get('42')['origin'],'FI')
+        self.press('Manila');self.assertEqual(self.s.wizard_get('42')['destination'],'city:MNL')
     def test_text_not_interpreted_as_route_in_wizard(self):
         self.r=self.b.handle('42','z Polski do Filipin');self.assertIn('Wybierz przycisk',self.r)
         self.assertEqual(self.s.wizard_get('42')['step'],'trip');self.assertFalse(self.p.specs)
-    def test_custom_place_requires_opt_in(self):
+    def test_typing_place_also_works_without_extra_click(self):
         self.press('W jedną stronę');self.r=self.b.handle('42','Rzym')
-        self.assertEqual(self.s.wizard_get('42')['origin'],'')
-        self.press('Inne miejsce');self.r=self.b.handle('42','Rzym')
         self.assertEqual(self.s.wizard_get('42')['origin'],'city:ROM');self.assertIn('Dokąd',self.r)
     def test_back_and_change_trip(self):
         self.press('Tam i z powrotem');self.press('Wstecz');self.press('W jedną stronę')
@@ -60,12 +63,64 @@ class ButtonFlow(unittest.TestCase):
         self.assertEqual(self.s.wizard_get('42')['trip'],'')
     def test_same_place_is_rejected(self):
         self.press('W jedną stronę');self.press('Polska')
-        for _ in range(2):self.press('Więcej miejsc')
-        self.press('Polska');self.assertIn('różne miejsca',self.r)
+        self.press('Inne miejsce');self.r=self.b.handle('42','Polska');self.assertIn('różne miejsca',self.r)
         self.assertEqual(self.s.wizard_get('42')['destination'],'')
     def test_old_state_migrates_to_first_question(self):
         self.s.wizard_set('42',{'step':'origin','choices':[]})
         reply=self.b.callback('42','wz:new');self.assertIn('Krok 1',reply)
+    def test_back_at_every_step_for_both_trip_types(self):
+        for returning in (False,True):
+            with self.subTest(returning=returning):
+                self.r=self.b.handle('42','/start')
+                sequence=[('Tam i z powrotem' if returning else 'W jedną stronę','origin'),('Polska','destination'),('Filipiny','when'),('Najbliższe 14 dni','nights' if returning else 'stops')]
+                if returning:sequence.append(('10-14 nocy','stops'))
+                sequence += [('Maks. 2','budget'),('2000 zł','summary')]
+                for label,step in sequence:
+                    previous=self.s.wizard_get('42')['step']
+                    self.press(label);self.assertEqual(self.s.wizard_get('42')['step'],step)
+                    self.press('Wstecz');self.assertEqual(self.s.wizard_get('42')['step'],previous)
+                    self.press(label);self.assertEqual(self.s.wizard_get('42')['step'],step)
+    def test_back_from_custom_returns_picker_without_advancing(self):
+        self.press('W jedną stronę');self.press('Inne miejsce');self.press('Wróć do wyboru')
+        self.assertEqual(self.s.wizard_get('42')['step'],'origin')
+        self.assertTrue(any(b['text']=='Polska' for row in self.r.markup['inline_keyboard'] for b in row));self.press('Wstecz')
+        self.assertEqual(self.s.wizard_get('42')['step'],'trip')
+    def test_duplicate_back_does_not_skip_steps(self):
+        self.press('W jedną stronę');self.press('Polska')
+        old=next(b['callback_data'] for row in self.r.markup['inline_keyboard'] for b in row if 'Wstecz' in b['text'])
+        self.r=self.b.callback('42',old)
+        self.assertEqual(self.s.wizard_get('42')['step'],'origin')
+        reply=self.b.callback('42',old)
+        self.assertIn('starszego kroku',reply)
+        self.assertEqual(self.s.wizard_get('42')['step'],'origin')
+    def test_all_currencies_reach_provider_and_summary(self):
+        for currency in ('PLN','EUR','USD'):
+            with self.subTest(currency=currency):
+                self.r=self.b.handle('42','/start')
+                for label in ('W jedną stronę','Polska','Filipiny','Najbliższe 14 dni','Maks. 2',currency):self.press(label)
+                self.press('2000 zł' if currency=='PLN' else '500 '+currency)
+                self.assertIn(currency,self.r);self.press('Szukaj lotów')
+                self.assertEqual(self.p.specs[-1].currency,currency)
+    def test_currency_change_resets_old_budget_and_preserves_route(self):
+        self.flow();self.press('Budżet');self.press('EUR')
+        state=self.s.wizard_get('42')
+        self.assertEqual((state['budget'],state['origin'],state['destination']),('','PL','PH'))
+        self.press('Własna kwota');self.r=self.b.handle('42','200 zł')
+        self.assertIn('Wybrana waluta to EUR',self.r)
+        self.assertEqual(self.s.wizard_get('42')['step'],'budget')
+        self.r=self.b.handle('42','250,50 EUR');self.assertIn('250.5 EUR',self.r)
+        self.press('Szukaj lotów');self.assertEqual(self.p.specs[-1].currency,'EUR')
+    def test_return_search_in_usd_and_edit_back(self):
+        self.flow(True);self.press('Budżet');self.press('USD');self.press('1000 USD')
+        self.assertIn('Podsumowanie',self.r);self.press('Skąd');self.press('Podsumowanie')
+        self.assertIn('Podsumowanie',self.r);self.press('Szukaj lotów')
+        spec=self.p.specs[-1];self.assertEqual((spec.currency,spec.nights_from,spec.nights_to),('USD',10,14))
+    def test_cancel_switch_to_return_before_nights_restores_valid_summary(self):
+        self.flow();self.press('Typ/pobyt');self.press('Tam i z powrotem')
+        self.assertIn('Ile nocy',self.r);self.press('Podsumowanie')
+        self.assertIn('Podsumowanie',self.r)
+        state=self.s.wizard_get('42');self.assertEqual(state['trip'],'oneway')
+        self.press('Szukaj lotów');self.assertEqual(self.p.specs[-1].nights_from,0)
     def test_restart_preserves_state(self):
         self.press('W jedną stronę');old=self.r
         self.b=Bot(self.p,self.s);self.press('Polska');self.assertIn('Dokąd',self.r)

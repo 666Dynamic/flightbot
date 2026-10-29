@@ -1,3 +1,7 @@
+## Uproszczony kreator (29.10.2026)
+
+Krótkie listy miejsc bez stronicowania. „Inne miejsce” pozwala wpisać kraj, region lub miasto; nazwy można też wpisać bezpośrednio na kroku miejsca. W kroku Budżet wybierz PLN, EUR lub USD, następnie kwotę albo „Bez limitu”. Zmiana waluty zeruje poprzedni budżet, bez przeliczania po domyślnym kursie. Cofanie własnego wpisu wraca do wyboru; cofanie edycji wraca do poprzedniego podsumowania. Starsze przyciski nie przesuwają aktualnego kroku.
+
 # Flightbot — Telegram z ofertami Kiwi.com
 
 ## Bieżące źródło ofert (29.10.2026)
