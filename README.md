@@ -13,7 +13,19 @@ Bot Telegram z wyszukiwaniem i obserwacjami Flightlist. Python 3.9+, biblioteka 
 
 ## Kreator krok po kroku
 
-`/kreator` (też w menu bota i pod `/help`) prowadzi przyciskami: skąd → dokąd → kiedy → jedna strona / tam i z powrotem (+ liczba nocy) → przesiadki → budżet w PLN → podsumowanie. Na każdym kroku można zamiast przycisku wpisać własną wartość: miasto, kraj lub region (np. „Bali”, „Skandynawia”), daty `10.12-20.12`, pobyt `6-9`, kwotę `1500`. Kreator edytuje jedną wiadomość zamiast wysyłać nowe. W podsumowaniu każdy filtr można zmienić osobno; pod wynikami jest „🔁 Zmień filtry”. Stan kreatora trzymany jest 24 h w tabeli `wizards`. Zwykłe zdania („loty z Warszawy do Rzymu”) działają także w trakcie kreatora.
+`/start` i `/kreator` otwierają ten sam formularz przyciskowy:
+
+1. Jedna strona albo tam i z powrotem.
+2. Skąd — miasto lub cały kraj.
+3. Dokąd — miasto, kraj lub region.
+4. Termin wylotu: następne 7/14/30/60/90 dni albo przyszły miesiąc.
+5. Pobyt w nocach (tylko podróż powrotna).
+6. Przesiadki.
+7. Budżet w PLN i podsumowanie przed wyszukiwaniem.
+
+Przy jednej stronie krok pobytu jest pomijany. Popularne miejsca są na kolejnych stronach przycisków; cały standardowy przebieg nie wymaga wpisywania wiadomości. Dla miejsca spoza listy wybierz **Inne miejsce** i wpisz samą nazwę. Własne daty, zakres nocy i kwota mają osobne przyciski. Zwykły tekst podczas kreatora nie uruchamia parsera tras — najpierw trzeba jawnie wybrać własne pole.
+
+W każdym kroku działa Wstecz/Anuluj; w podsumowaniu można zmienić filtry. Stare przyciski poprzedniej sesji i poprzednich kroków nie modyfikują bieżącego wyszukiwania. Stan jest zapisany na 24 h. Po błędzie źródła formularz zachowuje filtry i daje link do tego samego wyszukiwania na Flightlist. Link nie gwarantuje dostępności strony ani ceny. Nie zmienia się stan obserwacji.
 
 ## Przyciski
 
@@ -93,6 +105,6 @@ W Safari/Telegram potwierdzono odpowiedzi na zwykłe zdania Warszawa → Manila 
 - Nazwy miejsc i ich polskie odmiany są normalizowane; luźne dopasowanie (np. York → New York) wymaga wyboru zamiast automatycznej zmiany celu. Wybór regionu zachowuje identyfikator źródła.
 - Filtry są rozpoznawane przed trasą, więc „od 20.12 do 05.01” nie trafia do nazwy celu. Daty bez roku przechodzą przez granicę roku względem początku zakresu. Obsługiwane są też daty ISO, „w listopadzie 2027”, „bezpośrednio”, kwoty „4 000,50 zł”, symbole €/$.
 - „Na 7 dni” wymaga doprecyzowania: termin wylotu to „w następnych 7 dniach”, długość pobytu to „pobyt 7 nocy”. Nierozpoznane wymagania (np. bagaż, liczba osób) nie są pomijane. Bot nie jest pełnym asystentem konwersacyjnym.
-- Nowe zapytanie „Polska → Filipiny” kończy poprzedni kreator. Przyciski nowych kreatorów mają identyfikator aktualnego kroku; starsze wiadomości nie zmieniają nowej sesji. Ujemny indeks miejsca, pomijanie kroków i wyszukiwanie niekompletnego formularza są odrzucane.
+- Poza kreatorem parser przyjmuje trasę „Polska → Filipiny”. W kreatorze tekst obsługiwany jest wyłącznie po jawnym wybraniu własnego pola. Przyciski nowych kreatorów mają identyfikator aktualnego kroku; starsze wiadomości nie zmieniają nowej sesji. Ujemny indeks miejsca, pomijanie kroków i wyszukiwanie niekompletnego formularza są odrzucane.
 - Błędna odpowiedź API lokalizacji daje kontrolowany komunikat; dodatkowe argumenty komend nie są ignorowane.
-- Walidacja: 114 testów offline; dodatkowe wyniki sprawdzenia żywych lokalizacji i zakres audytu opisano w `REVIEW-2026-10-29.md`. Zmiany wymagają wdrożenia na serwerze. Nie potwierdzono nowej wersji w Telegramie ani bieżącego statusu serwera.
+- Walidacja: 126 testów offline; dodatkowe wyniki sprawdzenia żywych lokalizacji i zakres audytu opisano w `REVIEW-2026-10-29.md`. Zmiany wymagają wdrożenia na serwerze. Nie potwierdzono nowej wersji w Telegramie ani bieżącego statusu serwera.

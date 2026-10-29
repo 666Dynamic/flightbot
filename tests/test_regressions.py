@@ -27,6 +27,10 @@ class Provider:
 
 class Regressions(unittest.TestCase):
     def setUp(self):self.p=Provider();self.s=Store(':memory:');self.b=Bot(self.p,self.s)
+    def click(self,data):
+        state=self.s.wizard_get('42')
+        if state and data.startswith('wz:'):data='wz:'+state['token']+':'+data[3:]
+        return self.b.callback('42',data)
     def test_noise_without_z_does_not_become_city(self):
         r=self.b.handle('42','wyszukaj mi loty Warszawa do Manila')
         self.assertEqual((self.p.searched[-1].origin,self.p.searched[-1].destination),('city:WAW','city:MNL'))
@@ -77,28 +81,29 @@ class Regressions(unittest.TestCase):
             p=Flightlist();p.get=lambda *args,body=body:body
             with self.subTest(body=body):
                 with self.assertRaises(ProviderError):p.locations('Rome')
-    def test_new_route_bypasses_and_clears_wizard(self):
+    def test_new_route_does_not_mix_with_button_wizard(self):
         self.b.handle('42','/kreator')
-        self.b.handle('42','Polska → Filipiny')
-        self.assertEqual(self.p.searched[-1].destination,'PH');self.assertIsNone(self.s.wizard_get('42'))
+        reply=self.b.handle('42','Polska → Filipiny')
+        self.assertFalse(self.p.searched);self.assertEqual(self.s.wizard_get('42')['step'],'trip')
+        self.assertIn('Wybierz przycisk',reply)
     def test_old_step_button_does_not_move_wizard(self):
-        self.b.handle('42','/kreator');self.b.callback('42','wz:o:PL')
-        self.b.callback('42','wz:o:city:WAW')
+        self.b.handle('42','/kreator');self.click('wz:t:oneway');self.click('wz:o:PL')
+        self.click('wz:o:city:WAW')
         data=self.s.wizard_get('42');self.assertEqual((data['step'],data['origin']),('destination','PL'))
     def test_previous_session_button_rejected(self):
         r=self.b.handle('42','/kreator');old=r.markup['inline_keyboard'][0][0]['callback_data']
         self.b.handle('42','/kreator');reply=self.b.callback('42',old)
         self.assertIn('starszego kroku',reply);self.assertEqual(self.s.wizard_get('42')['origin'],'')
     def test_negative_pick_not_allowed(self):
-        self.b.handle('42','/kreator');self.b.handle('42','York')
-        reply=self.b.callback('42','wz:pick:-1');self.assertIn('Nieaktualny',reply)
+        self.b.handle('42','/kreator');self.click('wz:t:oneway');self.click('wz:custom');self.b.handle('42','York')
+        reply=self.click('wz:pick:-1');self.assertIn('Nieaktualny',reply)
         self.assertEqual(self.s.wizard_get('42')['origin'],'')
     def test_go_and_edit_incomplete_do_not_crash(self):
         self.b.handle('42','/kreator')
         for command in ['wz:go','wz:ed:budget','wz:edit']:
-            reply=self.b.callback('42',command)
+            reply=self.click(command)
             self.assertFalse(self.p.searched)
-        self.assertEqual(self.s.wizard_get('42')['step'],'origin')
+        self.assertEqual(self.s.wizard_get('42')['step'],'trip')
     def test_malformed_telegram_response_redacted(self):
         from unittest.mock import patch
         from io import BytesIO

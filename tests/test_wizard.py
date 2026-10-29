@@ -29,18 +29,21 @@ def callbacks(reply):
 class WizardTests(unittest.TestCase):
     def setUp(self):
         self.s=Store(":memory:");self.p=Provider();self.b=Bot(self.p,self.s)
-    def click(self,data):return self.b.callback("42",data)
+    def click(self,data):
+        state=self.s.wizard_get("42")
+        if state and data.startswith("wz:"):data="wz:"+state["token"]+":"+data[3:]
+        return self.b.callback("42",data)
     def full_oneway(self):
         self.b.handle("42","/kreator")
-        for data in ("wz:o:city:WAW","wz:d:ES","wz:w:30","wz:t:oneway","wz:s:1","wz:b:1000"):last=self.click(data)
+        for data in ("wz:t:oneway","wz:o:city:WAW","wz:d:ES","wz:w:30","wz:s:1","wz:b:1000"):last=self.click(data)
         return last
-    def test_start_shows_origin_step(self):
+    def test_start_shows_trip_step(self):
         reply=self.b.handle("42","/kreator")
-        self.assertIn("Krok 1/6",reply);self.assertIn("wz:o:PL",callbacks(reply));self.assertFalse(reply.edit)
+        self.assertIn("Krok 1",reply);self.assertIn("wz:t:oneway",callbacks(reply));self.assertFalse(reply.edit)
     def test_all_callback_data_fits_telegram_limit(self):
         self.b.handle("42","/kreator")
         for step in WIZARD_STEPS[:-1]:
-            data=self.s.wizard_get("42");data.update(step=step,origin="PL",destination="ES");self.s.wizard_set("42",data)
+            data=self.s.wizard_get("42");data.update(step=step,trip="oneway",origin="PL",destination="ES");self.s.wizard_set("42",data)
             reply=self.b.wizard_prompt(data)
             self.assertTrue(all(len(c.encode())<=64 for c in callbacks(reply) if c))
     def test_oneway_flow_reaches_summary_and_search(self):
@@ -53,34 +56,34 @@ class WizardTests(unittest.TestCase):
         self.assertIn("wz:edit",callbacks(result));self.assertTrue(any(c.startswith("watch:") for c in callbacks(result) if c))
     def test_return_trip_asks_nights(self):
         self.b.handle("42","/kreator")
-        for data in ("wz:o:PL","wz:d:TH","wz:w:next"):self.click(data)
-        reply=self.click("wz:t:return");self.assertIn("Ile nocy",reply)
-        reply=self.click("wz:n:10-14");self.assertIn("Krok 5/6",reply)
+        for data in ("wz:t:return","wz:o:PL","wz:d:TH"):self.click(data)
+        reply=self.click("wz:w:next");self.assertIn("Ile nocy",reply)
+        reply=self.click("wz:n:10-14");self.assertIn("Krok 6/7",reply)
         data=self.s.wizard_get("42");self.assertEqual((data["nights_from"],data["nights_to"]),(10,14))
         self.assertTrue(data["start"].endswith("-01"))
     def test_back_skips_nights_for_oneway(self):
         self.b.handle("42","/kreator")
-        for data in ("wz:o:PL","wz:d:TH","wz:w:30","wz:t:oneway"):self.click(data)
-        self.assertIn("Krok 4/6 · W jedną",self.click("wz:back"))
+        for data in ("wz:t:oneway","wz:o:PL","wz:d:TH","wz:w:30"):self.click(data)
+        self.assertIn("Krok 4/6 · Kiedy",self.click("wz:back"))
     def test_typed_place_and_ambiguous_choice(self):
-        self.b.handle("42","/kreator")
-        reply=self.b.handle("42","Rzym");self.assertIn("Krok 2/6",reply)
+        self.b.handle("42","/kreator");self.click("wz:t:oneway");self.click("wz:custom")
+        reply=self.b.handle("42","Rzym");self.assertIn("Krok 3/6",reply)
         self.assertEqual(self.s.wizard_get("42")["origin"],"city:ROM")
-        reply=self.b.handle("42","santiago");self.assertIn("wz:pick:1",callbacks(reply))
-        reply=self.click("wz:pick:1");self.assertIn("Krok 3/6",reply)
+        self.click("wz:custom");reply=self.b.handle("42","santiago");self.assertIn("wz:pick:1",callbacks(reply))
+        reply=self.click("wz:pick:1");self.assertIn("Krok 4/6",reply)
         self.assertEqual(self.s.wizard_get("42")["destination_name"],"Santiago (STI), Dominican Republic")
     def test_typed_dates_nights_budget(self):
         self.b.handle("42","/kreator")
-        for data in ("wz:o:PL","wz:d:TH"):self.click(data)
+        for data in ("wz:t:return","wz:o:PL","wz:d:TH"):self.click(data)
         year=datetime.now(TZ).year+1
-        self.b.handle("42",f"10.01.{year}-20.01.{year}")
+        self.click("wz:custom");self.b.handle("42",f"10.01.{year}-20.01.{year}")
         data=self.s.wizard_get("42");self.assertEqual((data["start"],data["end"]),(f"{year}-01-10",f"{year}-01-20"))
-        self.click("wz:t:return");self.b.handle("42","6-9");self.click("wz:s:4")
+        self.click("wz:custom");self.b.handle("42","6-9");self.click("wz:s:4");self.click("wz:custom")
         reply=self.b.handle("42","1 500 zł");self.assertIn("do 1500 PLN",reply)
     def test_invalid_text_keeps_step_with_warning(self):
         self.b.handle("42","/kreator")
-        for data in ("wz:o:PL","wz:d:TH"):self.click(data)
-        reply=self.b.handle("42","kiedyś");self.assertIn("⚠️",reply);self.assertIn("Krok 3/6",reply)
+        for data in ("wz:t:return","wz:o:PL","wz:d:TH"):self.click(data)
+        self.click("wz:custom");reply=self.b.handle("42","kiedyś");self.assertIn("⚠️",reply);self.assertIn("Wpisz tylko daty",reply)
         reply=self.b.handle("42","01.01.2020-05.01.2020");self.assertIn("przeszłości",reply)
     def test_edit_from_summary_returns_to_summary(self):
         self.full_oneway()
@@ -107,9 +110,9 @@ class WizardTests(unittest.TestCase):
             self.assertIn("⚠️",self.click(data))
         self.assertEqual(self.s.wizard_get("42")["origin"],"")
     def test_polish_country_and_bali_names(self):
-        self.b.handle("42","/kreator");self.b.handle("42","Włochy")
+        self.b.handle("42","/kreator");self.click("wz:t:oneway");self.click("wz:custom");self.b.handle("42","Włochy")
         self.assertEqual(self.s.wizard_get("42")["origin"],"IT")
-        reply=self.b.handle("42","bali");self.assertIn("✅ Dokąd: Bali",reply)
+        self.click("wz:custom");reply=self.b.handle("42","bali");self.assertIn("✅ Dokąd: Bali",reply)
         self.assertEqual(self.s.wizard_get("42")["destination"],"DPS")
     def test_provider_empty_state(self):
         result=parse_results(Path(__file__).with_name("no-results.html").read_text())
@@ -133,7 +136,7 @@ class EditQueueTests(unittest.TestCase):
         process_updates(bot,[update],{"42"},0)
         self.assertEqual(self.s.db.execute("SELECT edit_id FROM outbox").fetchone()[0],None)
         bot.store.wizard_set("42",wizard_new())
-        update["update_id"]=6;update["callback_query"]["data"]="wz:o:PL"
+        update["update_id"]=6;update["callback_query"]["data"]="wz:"+bot.store.wizard_get("42")["token"]+":t:oneway"
         process_updates(bot,[update],{"42"},0)
         self.assertEqual(self.s.db.execute("SELECT edit_id FROM outbox ORDER BY id DESC").fetchone()[0],77)
     def test_flush_edit_and_fallbacks(self):
