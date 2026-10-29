@@ -1,6 +1,24 @@
-# Flightbot — działająca wersja lokalna
+## Uproszczony kreator (29.10.2026)
 
-Bot Telegram z wyszukiwaniem i obserwacjami Flightlist. Python 3.9+, biblioteka standardowa. Kod starego monitora Rainbow nie został zmieniony.
+Krótkie listy miejsc bez stronicowania. „Inne miejsce” pozwala wpisać kraj, region lub miasto; nazwy można też wpisać bezpośrednio na kroku miejsca. W kroku Budżet wybierz PLN, EUR lub USD, następnie kwotę albo „Bez limitu”. Zmiana waluty zeruje poprzedni budżet, bez przeliczania po domyślnym kursie. Cofanie własnego wpisu wraca do wyboru; cofanie edycji wraca do poprzedniego podsumowania. Starsze przyciski nie przesuwają aktualnego kroku.
+
+# Flightbot — Telegram z ofertami Kiwi.com
+
+## Bieżące źródło ofert (29.10.2026)
+
+Wyszukiwanie działa przez **oficjalny publiczny MCP Kiwi.com** (`https://mcp.kiwi.com`), wywoływany bezpośrednio z Oracle. Nie wymaga klucza API ani sesji przeglądarki. To osobny produkt od partnerskiego Tequila API. Oficjalne informacje: https://www.kiwi.com/stories/kiwi-mcp-connector/ .
+
+Kreator /start pozostaje przyciskowy. Dopiero Szukaj lotów wywołuje źródło; zapisane obserwacje sprawdzane są automatycznie. Obsługa krajów, regionów, miast, zakresów dat i powrotów z długością pobytu została sprawdzona na żywo. Popularne miejsca nie wymagają wpisywania tekstu. Pod każdą z maksymalnie pięciu pokazanych ofert jest jej własny link rezerwacyjny Kiwi.
+
+**To nie są wyniki Flightlist.** Kiwi MCP zwraca wybrany zestaw ofert (w testach15), nie pełną setkę z Flightlist. Ceny mogą się różnić pomiędzy źródłami i zmieniać przed rezerwacją. Bot jawnie pokazuje źródło i nie gwarantuje pełnego zbioru ani identyczności cen. Flightlist pozostaje źródłem podpowiedzi miejsc (działa z Oracle) i opcjonalnym linkiem awaryjnym; zablokowanego pobierania ofert Flightlist nie używamy w domyślnym runtime.
+
+KiwiProvider waliduje walutę, dodatnią cenę, daty, typ podróży, pobyt, przesiadki i domenę linku. Identyfikator podróży nie zawiera ceny ani zmiennego linku. Snapshoty mają źródło: przełączenie Flightlist→Kiwi ustanawia nową bazę zamiast generować fałszywe alerty. Cache5min, odstęp zapytań2s; timeout100s. Limity i przyszła dostępność publicznego MCP zależą od Kiwi.
+
+Walidacja aktualnej wersji: **141 testów offline**, żywe zapytania lokalnie i na Oracle dla PL→PH, Gdańsk→Hamburg bezpośrednio i Warszawa→Manila 10–14 nocy. Dodatkowo przetestowano PL→Europa oraz podpowiedzi Warsaw/Gdańsk/Manila z Oracle. Szczegóły wdrożenia i testu w Telegramie: deploy/README.md.
+
+Poniżej dokumentacja kreatora i wcześniejszego adaptera; historyczne wyniki Flightlist nie są bieżącymi cenami.
+
+Bot Telegram z wyszukiwaniem i obserwacjami lotów. Python 3.9+, biblioteka standardowa. Kod starego monitora Rainbow nie został zmieniony.
 
 ## Co działa
 
@@ -13,7 +31,19 @@ Bot Telegram z wyszukiwaniem i obserwacjami Flightlist. Python 3.9+, biblioteka 
 
 ## Kreator krok po kroku
 
-`/kreator` (też w menu bota i pod `/help`) prowadzi przyciskami: skąd → dokąd → kiedy → jedna strona / tam i z powrotem (+ liczba nocy) → przesiadki → budżet w PLN → podsumowanie. Na każdym kroku można zamiast przycisku wpisać własną wartość: miasto, kraj lub region (np. „Bali”, „Skandynawia”), daty `10.12-20.12`, pobyt `6-9`, kwotę `1500`. Kreator edytuje jedną wiadomość zamiast wysyłać nowe. W podsumowaniu każdy filtr można zmienić osobno; pod wynikami jest „🔁 Zmień filtry”. Stan kreatora trzymany jest 24 h w tabeli `wizards`. Zwykłe zdania („loty z Warszawy do Rzymu”) działają także w trakcie kreatora.
+`/start` i `/kreator` otwierają ten sam formularz przyciskowy:
+
+1. Jedna strona albo tam i z powrotem.
+2. Skąd — miasto lub cały kraj.
+3. Dokąd — miasto, kraj lub region.
+4. Termin wylotu: następne 7/14/30/60/90 dni albo przyszły miesiąc.
+5. Pobyt w nocach (tylko podróż powrotna).
+6. Przesiadki.
+7. Budżet w PLN i podsumowanie przed wyszukiwaniem.
+
+Przy jednej stronie krok pobytu jest pomijany. Popularne miejsca są na kolejnych stronach przycisków; cały standardowy przebieg nie wymaga wpisywania wiadomości. Dla miejsca spoza listy wybierz **Inne miejsce** i wpisz samą nazwę. Własne daty, zakres nocy i kwota mają osobne przyciski. Zwykły tekst podczas kreatora nie uruchamia parsera tras — najpierw trzeba jawnie wybrać własne pole.
+
+W każdym kroku działa Wstecz/Anuluj; w podsumowaniu można zmienić filtry. Stare przyciski poprzedniej sesji i poprzednich kroków nie modyfikują bieżącego wyszukiwania. Stan jest zapisany na 24 h. Po błędzie źródła formularz zachowuje filtry i daje link do tego samego wyszukiwania na Flightlist. Link nie gwarantuje dostępności strony ani ceny. Nie zmienia się stan obserwacji.
 
 ## Przyciski
 
@@ -49,7 +79,7 @@ Dla już skonfigurowanego bota: `python3 connect.py run`. Nie uruchamiaj drugieg
 
 Token, identyfikator dozwolonego czatu, baza i log są w `work/flightbot-runtime/` poza pakietem kodu. Uprawnienia folderu: 700; konfiguracji i bazy: 600. Kopia bazy sprzed aktualizacji: `before-v2.sqlite3` w tym samym folderze. Te pliki nie są dołączane do ZIP. `bot.pid` wskazuje uruchomiony proces; launcher korzysta z blokady plikowej.
 
-Usługa działa lokalnie. Uśpienie/wyłączenie komputera przerywa działanie. Nie zainstalowano autostartu ani hostingu całodobowego. Zamknięcie samego Safari nie przerywa pracy procesu uruchomionego w tle.
+Wdrożenie opisane w `deploy/README.md` korzysta z systemd na serwerze Oracle. Nie uruchamiaj lokalnego pollera równolegle z serwerem. Sama lokalna wersja zatrzyma obsługę po uśpieniu/wyłączeniu komputera. Stan działającej usługi należy sprawdzać na serwerze; plik `bot.pid` nie jest potwierdzeniem działania.
 
 ## Testy bez sieci i Telegrama
 
@@ -82,8 +112,17 @@ Niezależnie od testów: gotowy adapter pobrał 100 ofert powrotnych PL → TH z
 
 Przyciski obserwacji, ręcznego sprawdzania, usuwania i przywracania zostały sprawdzone na żywo w Safari. Dodatkowy monitor testowy wyłączono; pierwotny #1 pozostał aktywny.
 
-Kolejny etap: wybór filtrów krok po kroku oraz przeniesienie usługi na dostępny serwer dla pracy całodobowej.
+Kreator i konfiguracja systemd zostały dodane 28.10.2026. Historyczne testy poniżej nie potwierdzają bieżącego stanu usługi.
 
 Naturalne wyszukiwanie zweryfikowano na żywym adapterze dla PL → PH, Warszawa → Manila i Gdańsk → Hamburg; każda trasa zwróciła 100 ofert. Zapis: `live-natural-test.json`.
 
 W Safari/Telegram potwierdzono odpowiedzi na zwykłe zdania Warszawa → Manila (pierwsza oferta 1332 PLN) i Gdańsk → Hamburg (105 PLN), bez kodów i dat. Zrzuty w katalogu nadrzędnym `outputs/`. Ceny z czasu testu, bez gwarancji utrzymania.
+
+## Poprawki przeglądu 29.10.2026
+
+- Nazwy miejsc i ich polskie odmiany są normalizowane; luźne dopasowanie (np. York → New York) wymaga wyboru zamiast automatycznej zmiany celu. Wybór regionu zachowuje identyfikator źródła.
+- Filtry są rozpoznawane przed trasą, więc „od 20.12 do 05.01” nie trafia do nazwy celu. Daty bez roku przechodzą przez granicę roku względem początku zakresu. Obsługiwane są też daty ISO, „w listopadzie 2027”, „bezpośrednio”, kwoty „4 000,50 zł”, symbole €/$.
+- „Na 7 dni” wymaga doprecyzowania: termin wylotu to „w następnych 7 dniach”, długość pobytu to „pobyt 7 nocy”. Nierozpoznane wymagania (np. bagaż, liczba osób) nie są pomijane. Bot nie jest pełnym asystentem konwersacyjnym.
+- Poza kreatorem parser przyjmuje trasę „Polska → Filipiny”. W kreatorze tekst obsługiwany jest wyłącznie po jawnym wybraniu własnego pola. Przyciski nowych kreatorów mają identyfikator aktualnego kroku; starsze wiadomości nie zmieniają nowej sesji. Ujemny indeks miejsca, pomijanie kroków i wyszukiwanie niekompletnego formularza są odrzucane.
+- Błędna odpowiedź API lokalizacji daje kontrolowany komunikat; dodatkowe argumenty komend nie są ignorowane.
+- Walidacja: 126 testów offline; dodatkowe wyniki sprawdzenia żywych lokalizacji i zakres audytu opisano w `REVIEW-2026-10-29.md`. Zmiany wymagają wdrożenia na serwerze. Nie potwierdzono nowej wersji w Telegramie ani bieżącego statusu serwera.
