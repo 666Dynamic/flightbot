@@ -37,3 +37,13 @@ Samo `ssh chmura` nie korzysta tu z konfiguracji. Działająca konfiguracja na M
 Użycie: `rtk proxy ssh -F /pełna/ścieżka/ssh-cloud.conf chmura ...`. Plik wskazuje użytkownika ubuntu, prywatny adres Tailscale, plik klucza i właściwy known_hosts; weryfikacja klucza pozostaje włączona. Nie kopiować sekretów do repo.
 
 Log produkcji potwierdził powtarzające się HTTP403 wyszukiwarki Flightlist od 28.10. Formularz po błędzie zachowuje filtry i udostępnia bezpośredni link. Działanie usługi nie jest równoznaczne z dostępnością ofert.
+
+## Działające źródło Kiwi — 29.10.2026
+
+Kod wykonawczy 3ee32e3 (flightbot.py, connect.py, kiwi_provider.py) wdrożono z backupem `/opt/flightbot/backups/kiwi-20261029T125716Z`. systemd active, baza integrity_check=ok; dodano snapshots.source. Nie przenoszono sekretów ani nie zmieniano stanów monitorów (#1off,#2off,#3on). W razie wycofania starszy kod nie obsługuje dodatkowej kolumny snapshotów: wycofanie wymaga zgodnej migracji albo odtworzenia bazy przy zatrzymanej usłudze, z uwzględnieniem zmian po backupie.
+
+Nowy moduł kiwi_provider.py MUSI być instalowany razem z flightbot.py i connect.py. Samo skopiowanie dwóch plików jak w starym przykładzie nie wystarczy.
+
+Żywe testy adaptera z Oracle: PL→PH15ofert/1430PLN, GDN→HAM bezpośrednio15ofert/154PLN, WAW→MNL powrót10–14nocy15ofert/2733PLN. Ceny wyłącznie z czasu testu. W Telegramie przez Safari potwierdzono wyszukiwanie zachowanych filtrów PL→PT7dni/max1stop: bot pokazał5ofert z linkami, od165PLN. Nie uruchamiano dodatkowego pollera ani GitHub Actions. Source change ustawia baseline bez fałszywych alertów.
+
+Dodatkowy test Telegrama: pełna podróż powrotna Warszawa→Filipiny10–14nocy do5000PLN zwróciła oferty2733PLN. Ręczne sprawdzenie aktywnego monitora#3 zwróciło oferty1430PLN. Produkcyjny scan bez wysyłania: errors=[], outbox0→0; snapshot#3 ma source=Kiwi.com, stan aktywnych monitorów bez zmian.

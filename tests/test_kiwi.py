@@ -18,7 +18,7 @@ class KiwiTests(unittest.TestCase):
         self.spec=Search('PL','PH',currency='PLN',stops=1)
     def test_real_response_mapping(self):
         r=parse_kiwi(DATA,self.spec);self.assertEqual((r.count,r.source,r.offers[0].price),(2,'Kiwi.com','1430'))
-        self.assertIn('19.11.2026',r.offers[0].summary);self.assertTrue(r.offers[0].key.startswith('kiwi:'))
+        self.assertIn('1 przesiadka',r.offers[0].summary);self.assertNotIn('/i',r.offers[0].summary);self.assertIn('19.11.2026',r.offers[0].summary);self.assertTrue(r.offers[0].key.startswith('kiwi:'))
     def test_country_window_and_stops(self):
         a=KiwiProvider().arguments(self.spec)
         self.assertEqual((a['flyFrom'],a['flyTo'],a['departureDate'],a['departureDateTo']),('PL','PH','29/10/2026','27/11/2026'))

@@ -133,7 +133,7 @@ def parse_kiwi(data,spec):
                 if duration<=0:raise ValueError('duration')
                 summaries.append(f"{carriers} · {departure:%d.%m.%Y %H:%M} → {arrival:%d.%m.%Y %H:%M} · {h}h {m:02d}m · "+
                     f"{segments[0]['fromCity']} ({segments[0]['from']}) → {segments[-1]['toCity']} ({segments[-1]['to']}) · "+
-                    ('bez przesiadek' if not leg['stops'] else f"{leg['stops']} przesiadka/i"))
+                    ('bez przesiadek' if not leg['stops'] else '1 przesiadka' if leg['stops']==1 else f"{leg['stops']} przesiadki"))
                 identity.append([(s['from'],s['to'],s['departureTime'],s['arrivalTime'],s.get('carrier'),s.get('flightNumber')) for s in segments])
             summary=summaries[0]+('\nPowrót: '+summaries[1] if inbound else '')
             key='kiwi:'+hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()[:24]
