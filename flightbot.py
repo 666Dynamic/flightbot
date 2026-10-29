@@ -96,6 +96,7 @@ class Result:
     url: str
     observed_at: str
     truncated: bool
+    source: str = "Flightlist"
 
 class Node:
     def __init__(self, tag="root", attrs=()):
@@ -229,7 +230,9 @@ COUNTRIES = {"polski":"PL","polska":"PL","poland":"PL", "niemiec":"DE","niemcy":
              "tajlandii":"TH","tajlandia":"TH","thailand":"TH", "hiszpanii":"ES","hiszpania":"ES",
              "włoch":"IT","wlochy":"IT","włochy":"IT","portugalii":"PT","portugalia":"PT"}
 COUNTRIES.update({"filipin":"PH","filipiny":"PH","philippines":"PH","manili":"MNL","manila":"MNL","japonii":"JP","japonia":"JP","tokio":"TYO","wietnamu":"VN","wietnam":"VN","malezji":"MY","malezja":"MY","indonezji":"ID","indonezja":"ID","bali":"DPS"})
-HELP = """✈️ /start — zacznij wyszukiwanie przyciskami.
+HELP = """Oferty: Kiwi.com. Wybierz filtry przyciskami.
+
+✈️ /start — zacznij wyszukiwanie przyciskami.
 🧭 /kreator — nowe wyszukiwanie krok po kroku.
 
 ✈️ Albo napisz po prostu:
@@ -489,6 +492,8 @@ class Store:
         CREATE TABLE IF NOT EXISTS wizards(owner TEXT PRIMARY KEY,data TEXT NOT NULL,expires INTEGER NOT NULL);
 
         """)
+        if "source" not in [r[1] for r in self.db.execute("PRAGMA table_info(snapshots)")]:
+            self.db.execute("ALTER TABLE snapshots ADD COLUMN source TEXT NOT NULL DEFAULT 'Flightlist'")
         if "active" not in [r[1] for r in self.db.execute("PRAGMA table_info(watches)")]:
             self.db.execute("ALTER TABLE watches ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
         if "markup" not in [r[1] for r in self.db.execute("PRAGMA table_info(outbox)")]:
@@ -545,14 +550,14 @@ class Store:
             if search_identity(Search(**json.loads(existing["spec"]))) == search_identity(spec):
                 if not existing["active"]:
                     self.restore(owner,existing["id"])
-                    with self.db:self.db.execute("INSERT OR REPLACE INTO snapshots VALUES(?,?,?)",(existing["id"],json.dumps({o.key:asdict(o) for o in result.offers}),result.observed_at))
+                    with self.db:self.db.execute("INSERT OR REPLACE INTO snapshots(watch,data,observed,source) VALUES(?,?,?,?)",(existing["id"],json.dumps({o.key:asdict(o) for o in result.offers}),result.observed_at,result.source))
                 return existing["id"]
         if len(self.watches(owner)) >= 20 and not self.db.execute("SELECT 1 FROM watches WHERE owner=? AND spec=?",(owner,encoded)).fetchone():
             raise ValueError("Limit 20 monitorów na użytkownika.")
         with self.db:
             self.db.execute("INSERT OR IGNORE INTO watches(owner,spec) VALUES(?,?)",(owner,encoded))
             wid=self.db.execute("SELECT id FROM watches WHERE owner=? AND spec=?",(owner,encoded)).fetchone()[0]
-            self.db.execute("INSERT OR IGNORE INTO snapshots VALUES(?,?,?)",(wid,json.dumps({o.key:asdict(o) for o in result.offers}),result.observed_at))
+            self.db.execute("INSERT OR IGNORE INTO snapshots(watch,data,observed,source) VALUES(?,?,?,?)",(wid,json.dumps({o.key:asdict(o) for o in result.offers}),result.observed_at,result.source))
         return wid
     def watches(self, owner=None):
         if owner is None: return self.db.execute("SELECT * FROM watches WHERE active=1").fetchall()
@@ -570,7 +575,7 @@ class Store:
             except (ProviderError,ValueError) as e:
                 errors.append({"watch":row["id"],"error":str(e)}); continue
             spec=Search(**json.loads(row["spec"]))
-            oldrow=self.db.execute("SELECT data FROM snapshots WHERE watch=?",(row["id"],)).fetchone()
+            oldrow=self.db.execute("SELECT data,source FROM snapshots WHERE watch=?",(row["id"],)).fetchone()
             old=json.loads(oldrow[0]) if oldrow else {}
             current={o.key:asdict(o) for o in result.offers}
             alerts=[]
@@ -581,9 +586,9 @@ class Store:
                 elif prev["currency"]==o.currency and Decimal(o.price)<Decimal(prev["price"]):
                     alerts.append(f"Spadek {prev['price']} → {o.price} {o.currency}: "+offer_line(o))
             with self.db:
-                if oldrow and alerts:
-                    self.enqueue(row["owner"],f"Monitor #{row['id']}\n"+"\n".join(alerts[:5])+f"\nZmian: {len(alerts)}. Wyniki mogą obejmować tylko pierwsze 100 ofert.\n{result.url}")
-                self.db.execute("INSERT OR REPLACE INTO snapshots VALUES(?,?,?)",(row["id"],json.dumps(current),result.observed_at))
+                if oldrow and oldrow["source"]==result.source and alerts:
+                    self.enqueue(row["owner"],f"Monitor #{row['id']}\n"+"\n".join(alerts[:5])+f"\nZmian: {len(alerts)}. Wyniki dostawcy mogą obejmować tylko część ofert.\n{result.url}")
+                self.db.execute("INSERT OR REPLACE INTO snapshots(watch,data,observed,source) VALUES(?,?,?,?)",(row["id"],json.dumps(current),result.observed_at,result.source))
         return errors
 
 def offer_line(o):
@@ -603,7 +608,8 @@ def render(result,spec):
     lines.extend(f"{i}. {offer_line(o)}\n" for i,o in enumerate(offers[:5],1))
     if not result.count: lines.append("Brak lotów dla tych filtrów. Spróbuj szerszych dat, większej liczby przesiadek albo całego kraju/regionu.\n")
     elif not offers: lines.append("Brak ofert w budżecie w otrzymanym zestawie wyników.")
-    if result.truncated: lines.append("Limit 100 wyników — to nie jest pełna lista wszystkich lotów.")
+    if result.truncated: lines.append("Wybrane wyniki Kiwi.com — lista może być niepełna." if result.source=="Kiwi.com" else "Limit 100 wyników — to nie jest pełna lista wszystkich lotów.")
+    lines.append("Źródło: "+result.source)
     lines.extend(["Cena może się zmienić przed rezerwacją. Samodzielne przesiadki wyłączone.", result.url])
     return "\n".join(lines)
 
@@ -900,17 +906,26 @@ class Bot:
         result=self.provider.search(validated)
         if intent=="watch":
             wid=self.store.add(owner,validated,result)
-            return self.monitor_reply(wid,f"Zapisano monitor #{wid}. Pierwszy odczyt stanowi bazę.\n"+render(result,validated),result.url)
+            return self.monitor_reply(wid,f"Zapisano monitor #{wid}. Pierwszy odczyt stanowi bazę.\n"+render(result,validated),result.url,result,validated)
         return self.results_reply(owner,validated,result)
-    def monitor_reply(self,wid,text,url=None):
+    def monitor_reply(self,wid,text,url=None,result=None,spec=None):
         rows=[[button("🔄 Sprawdź teraz",f"check:{wid}"),button("🗑 Usuń",f"delete:{wid}")],[button("📋 Moje obserwacje","list")]]
         if url:
-            rows.insert(1,[{"text":"🔎 Wszystkie wyniki Flightlist","url":url}])
+            if result and result.source=="Kiwi.com":
+                visible=[o for o in result.offers if not spec or not spec.budget or Decimal(o.price)<=Decimal(spec.budget)][:5]
+                rows[1:1]=[[{"text":f"✈️ Oferta {i} · {o.price} {o.currency}","url":o.url}] for i,o in enumerate(visible,1)]
+            else:rows.insert(1,[{"text":"🔎 Otwórz stronę dostawcy","url":url}])
             text=text.replace(url,"").rstrip()
         return Reply(text,keyboard(*rows))
     def results_reply(self,owner,spec,result):
         token=self.store.action(owner,spec)
-        return Reply(render(result,spec).replace(result.url,"").rstrip(),keyboard([button("🔔 Obserwuj te loty","watch:"+token)],[{"text":"🔎 Wszystkie wyniki Flightlist","url":result.url}],[button("📋 Moje obserwacje","list")]))
+        rows=[[button("🔔 Obserwuj te loty","watch:"+token)]]
+        if result.source=="Kiwi.com":
+            visible=[o for o in result.offers if not spec.budget or Decimal(o.price)<=Decimal(spec.budget)][:5]
+            rows.extend([{"text":f"✈️ Oferta {i} · {o.price} {o.currency}","url":o.url}] for i,o in enumerate(visible,1))
+        else:rows.append([{"text":"🔎 Wszystkie wyniki Flightlist","url":result.url}])
+        rows.append([button("📋 Moje obserwacje","list")])
+        return Reply(render(result,spec).replace(result.url,"").rstrip(),keyboard(*rows))
     def list_reply(self,owner):
         rows=self.store.watches(owner)
         text="\n\n".join(f"#{r['id']} · "+describe_search(Search(**json.loads(r["spec"]))) for r in rows) or "Brak aktywnych obserwacji. Wyszukaj loty i naciśnij „Obserwuj te loty”."
@@ -940,7 +955,7 @@ class Bot:
             if action=="check":
                 spec=Search(**json.loads(row["spec"]))
                 result=self.provider.search(spec,refresh=True)
-                return self.monitor_reply(wid,f"Obserwacja #{wid} · sprawdzenie na żądanie\n"+render(result,spec),result.url)
+                return self.monitor_reply(wid,f"Obserwacja #{wid} · sprawdzenie na żądanie\n"+render(result,spec),result.url,result,spec)
             raise ValueError("Nieznany przycisk.")
         except (ValueError,ProviderError,ArithmeticError):return Reply("Nie udało się wykonać tej akcji. Przycisk mógł wygasnąć, monitor jest nieaktywny albo źródło chwilowo nie odpowiada. Użyj /lista lub wyszukaj loty ponownie.")
     def handle(self,owner,text):
@@ -968,7 +983,7 @@ class Bot:
             result=self.provider.search(arg)
             if action=="watch":
                 wid=self.store.add(owner,arg,result)
-                return self.monitor_reply(wid,f"Zapisano monitor #{wid}. Pierwszy odczyt stanowi bazę.\n"+render(result,arg),result.url)
+                return self.monitor_reply(wid,f"Zapisano monitor #{wid}. Pierwszy odczyt stanowi bazę.\n"+render(result,arg),result.url,result,arg)
             return self.results_reply(owner,arg,result)
         except (ValueError,ProviderError,ArithmeticError) as e:return "Nie udało się: "+str(e)
 
@@ -1081,7 +1096,8 @@ def main():
         if not os.environ.get("TELEGRAM_TOKEN") or not os.environ.get("ALLOWED_CHAT_IDS"):
             parser.error("Ustaw TELEGRAM_TOKEN i ALLOWED_CHAT_IDS.")
         if args.interval<900:parser.error("Minimalny odstęp monitorowania: 900 s.")
-    provider=Flightlist()
+    from kiwi_provider import KiwiProvider
+    provider=KiwiProvider()
     if args.mode=="chat" and args.fixture:
         fixture=Path(args.fixture).read_text()
         provider.search=lambda spec:parse_results(fixture,BASE+"?"+urlencode(spec.params()))

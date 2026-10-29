@@ -12,6 +12,7 @@ import stat
 import tempfile
 import time
 from flightbot import Bot, Flightlist, Store, Telegram, serve
+from kiwi_provider import KiwiProvider
 
 ROOT=Path(__file__).resolve().parent
 # Keep secrets and runtime state outside the deliverable folder and ZIP.
@@ -121,7 +122,7 @@ def run(interval):
         with store.db:
             store.db.execute("INSERT OR IGNORE INTO meta VALUES('offset',?)",(str(data["offset"]),))
         print(f"Bot @{data['username']} działa. W Telegramie wyślij /help. Ctrl+C zatrzymuje proces.",flush=True)
-        try:serve(Bot(Flightlist(),store),telegram,{data["chat_id"]},interval)
+        try:serve(Bot(KiwiProvider(),store),telegram,{data["chat_id"]},interval)
         finally:store.db.close()
 
 

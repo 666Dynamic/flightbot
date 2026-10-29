@@ -1,3 +1,11 @@
+# Aktualizacja źródła — 29.10.2026
+
+Znaleziono i sprawdzono oficjalny publiczny MCP Kiwi.com, inny produkt niż partnerska Tequila. Oficjalna strona: https://www.kiwi.com/stories/kiwi-mcp-connector/ . Publiczny endpoint https://mcp.kiwi.com odpowiada na initialize, tools/list i tools/call bez sekretów; schema narzędzia search-flight obsługuje departureDateTo, returnDateTo, nights_in_dst_from/to, kraje/miasta/regiony, walutę, maks. przesiadki i allow_self_transfer. Żywe wyniki otrzymano również z Oracle. Dodano adapter kiwi_provider.py. Nie korzysta z cookies Cloudflare ani z tunelu przez przeglądarkę. Nie nawiązywano kontaktu z dostawcami.
+
+Publiczny MCP zwraca wybór ofert (w testach15), a nie identyczny zestaw Flightlist. Nie twierdzić, że cenowo/ilościowo jest to kopia strony. To działające alternatywne źródło dla tych samych filtrów. Ceny i dostępność wymagają potwierdzenia przy rezerwacji.
+
+## Research historyczny
+
 # Research integracji — 27.10.2026
 
 ## Flightlist: rekomendowane źródło prototypu

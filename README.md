@@ -1,6 +1,20 @@
-# Flightbot — Telegram i Flightlist
+# Flightbot — Telegram z ofertami Kiwi.com
 
-Bot Telegram z wyszukiwaniem i obserwacjami Flightlist. Python 3.9+, biblioteka standardowa. Kod starego monitora Rainbow nie został zmieniony.
+## Bieżące źródło ofert (29.10.2026)
+
+Wyszukiwanie działa przez **oficjalny publiczny MCP Kiwi.com** (`https://mcp.kiwi.com`), wywoływany bezpośrednio z Oracle. Nie wymaga klucza API ani sesji przeglądarki. To osobny produkt od partnerskiego Tequila API. Oficjalne informacje: https://www.kiwi.com/stories/kiwi-mcp-connector/ .
+
+Kreator /start pozostaje przyciskowy. Dopiero Szukaj lotów wywołuje źródło; zapisane obserwacje sprawdzane są automatycznie. Obsługa krajów, regionów, miast, zakresów dat i powrotów z długością pobytu została sprawdzona na żywo. Popularne miejsca nie wymagają wpisywania tekstu. Pod każdą z maksymalnie pięciu pokazanych ofert jest jej własny link rezerwacyjny Kiwi.
+
+**To nie są wyniki Flightlist.** Kiwi MCP zwraca wybrany zestaw ofert (w testach15), nie pełną setkę z Flightlist. Ceny mogą się różnić pomiędzy źródłami i zmieniać przed rezerwacją. Bot jawnie pokazuje źródło i nie gwarantuje pełnego zbioru ani identyczności cen. Flightlist pozostaje źródłem podpowiedzi miejsc (działa z Oracle) i opcjonalnym linkiem awaryjnym; zablokowanego pobierania ofert Flightlist nie używamy w domyślnym runtime.
+
+KiwiProvider waliduje walutę, dodatnią cenę, daty, typ podróży, pobyt, przesiadki i domenę linku. Identyfikator podróży nie zawiera ceny ani zmiennego linku. Snapshoty mają źródło: przełączenie Flightlist→Kiwi ustanawia nową bazę zamiast generować fałszywe alerty. Cache5min, odstęp zapytań2s; timeout100s. Limity i przyszła dostępność publicznego MCP zależą od Kiwi.
+
+Walidacja aktualnej wersji: **141 testów offline**, żywe zapytania lokalnie i na Oracle dla PL→PH, Gdańsk→Hamburg bezpośrednio i Warszawa→Manila 10–14 nocy. Dodatkowo przetestowano PL→Europa oraz podpowiedzi Warsaw/Gdańsk/Manila z Oracle. Szczegóły wdrożenia i testu w Telegramie: deploy/README.md.
+
+Poniżej dokumentacja kreatora i wcześniejszego adaptera; historyczne wyniki Flightlist nie są bieżącymi cenami.
+
+Bot Telegram z wyszukiwaniem i obserwacjami lotów. Python 3.9+, biblioteka standardowa. Kod starego monitora Rainbow nie został zmieniony.
 
 ## Co działa
 
