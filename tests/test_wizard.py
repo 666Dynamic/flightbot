@@ -23,7 +23,8 @@ class FakeTelegram:
         if self.edit_error:raise TelegramRejected(self.edit_error)
     def send(self,owner,text):self.calls.append(("send",None,str(text)))
 
-def callbacks(reply):return [b.get("callback_data") for row in reply.markup["inline_keyboard"] for b in row]
+def callbacks(reply):
+    return [re.sub(r"^wz:[a-f0-9]{12}:","wz:",b.get("callback_data", "")) for row in reply.markup["inline_keyboard"] for b in row]
 
 class WizardTests(unittest.TestCase):
     def setUp(self):

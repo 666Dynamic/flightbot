@@ -148,6 +148,7 @@ def parse_results(html, search_url=BASE, expected_currency=None):
     if not counts:
         # Fail closed: an empty/error page is not an empty flight search.
         raise ProviderError("Nie rozpoznano liczby wyników; stan monitorów zachowany.")
+    if len(counts) != 1:raise ProviderError("Niejednoznaczna liczba wyników Flightlist.")
     count = int(counts[0][1])
     offers = []
     for item in region.find("li"):
@@ -157,6 +158,7 @@ def parse_results(html, search_url=BASE, expected_currency=None):
         price = re.match(r"^(US\$|PLN|EUR|€)\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\s+", summary)
         if not price:
             raise ProviderError("Nieznany format ceny/waluty; stan monitorów zachowany.")
+        if Decimal(price[2].replace(",", ""))<=0:raise ProviderError("Nieprawidłowa cena oferty.")
         currency={"US$":"USD","€":"EUR"}.get(price[1],price[1])
         if expected_currency and currency != expected_currency:
             raise ProviderError("Flightlist zwrócił inną walutę niż zamówiona; nie porównuję tych cen.")
@@ -202,7 +204,12 @@ class Flightlist:
         cache_key=("location",term.casefold())
         cached=self.cache.get(cache_key)
         if cached and time.monotonic()-cached[0]<3600:return cached[1]
-        data=json.loads(self.get(BASE+"api/locations?"+urlencode({"locale":"en","query":term}),"application/json"))
+        try:
+            data=json.loads(self.get(BASE+"api/locations?"+urlencode({"locale":"en","query":term}),"application/json"))
+        except (ValueError, TypeError):
+            raise ProviderError("Nieprawidłowa odpowiedź lokalizacji Flightlist. Spróbuj ponownie później.") from None
+        if not isinstance(data,dict) or not isinstance(data.get("results"),list):
+            raise ProviderError("Nieprawidłowa lista lokalizacji Flightlist. Spróbuj ponownie później.")
         values=[v for v in data.get("results",[]) if isinstance(v,dict) and isinstance(v.get("value"),str) and isinstance(v.get("text"),str)]
         if len(self.cache)>=128:self.cache.pop(next(iter(self.cache)))
         self.place_labels.update({v["value"]:v["text"][:120] for v in values})
@@ -262,183 +269,51 @@ def norm_place(value):
 CITY_ALIASES={"warszawa":"Warsaw","warszawy":"Warsaw","warszawie":"Warsaw","rzym":"Rome","rzymu":"Rome",
               "wieden":"Vienna","wiednia":"Vienna","nowego jorku":"New York","nowy jork":"New York",
               "pragi":"Prague","praga":"Prague","mediolanu":"Milan","mediolan":"Milan"}
+CITY_ALIASES.update({
+    "wroclaw":"Wrocław", "wroclawia":"Wrocław", "krakowa":"Kraków", "krakow":"Kraków",
+    "poznania":"Poznań", "poznan":"Poznań", "lodzi":"Łódź", "lodz":"Łódź",
+    "gdanska":"Gdańsk", "gdansk":"Gdańsk", "katowic":"Katowice", "katowice":"Katowice",
+    "szczecina":"Szczecin", "szczecin":"Szczecin", "berlina":"Berlin",
+    "monachium":"Munich", "paryza":"Paris", "paryz":"Paris", "londynu":"London", "londyn":"London",
+})
 COUNTRY_ONLY={k:v for k,v in COUNTRIES.items() if len(v)==2}
 
 def resolve_place(value):
-    return COUNTRY_ONLY.get(value.lower(),value)
-
-async def resolve_location(provider, value: str):
-    """Resolve a location string to a Flightlist location code using the API."""
-    value = value.strip()
-    # Already a valid code?
-    if re.fullmatch(r"[A-Z]{2,3}", value) or re.fullmatch(r"city:[A-Z]{3}", value):
-        return value, []
-
-    # Check aliases first
-    normalized = norm_place(value)
-    if normalized in CITY_ALIASES:
-        return CITY_ALIASES[normalized], []
-
-    # Query Flightlist API
-    try:
-        options = provider.locations(value)
-    except Exception as e:
-        raise ValueError(f"Błąd wyszukiwania lokalizacji: {e}")
-
-    if not options:
-        raise ValueError(f"Nie znalazłem miejsca „{value}”. Spróbuj wpisać pełniejszą nazwę (np. miasto, kraj, region).")
-
-    # Filter valid options
-    options = [o for o in options if re.fullmatch(r"[A-Za-z0-9_,.:-]{2,100}", o.get("value", ""))]
-    if not options:
-        raise ValueError(f"Nie znaleziono poprawnego kodu dla „{value}”.")
-
-    # Score matches
-    query_norm = norm_place(value)
-    scored = []
-    for o in options:
-        text = o.get("text", "")
-        name = norm_place(re.split(r"[,(]", text)[0])
-        # Generate matching forms for Polish declension
-        forms = {name}
-        for suffix in ["a", "u", "y", "i", "e", "o", "ą", "ę"]:
-            forms.add(name + suffix)
-        if name.endswith("a"):
-            forms.update({name[:-1] + s for s in ["y", "i", "e", "o"]})
-        if name.endswith("ów"):
-            forms.add(name[:-2])
-        if name.endswith("ew"):
-            forms.add(name[:-2])
-
-        # Check various matching strategies
-        score = 0
-        if query_norm == name:
-            score = 100
-        elif query_norm in forms:
-            score = 90
-        elif query_norm in norm_place(text):
-            score = 80
-        elif name.startswith(query_norm):
-            score = 70
-        elif query_norm.startswith(name):
-            score = 60
-        else:
-            # Fuzzy: check if query is contained in name or vice versa
-            if query_norm in name or name in query_norm:
-                score = 50
-
-        if score > 0:
-            # Prefer cities over airports, countries over regions
-            type_bonus = {"city": 10, "airport": 5, "country": 8, "region": 3, "continent": 2, "autonomous_territory": 1, "subdivision": 1}.get(o.get("type"), 0)
-            scored.append((score + type_bonus, o))
-
-    if not scored:
-        # Fallback: return first few options for user to choose
-        return None, options[:6]
-
-    scored.sort(key=lambda x: -x[0])
-    best = scored[0][1]
-    best_score = scored[0][0]
-
-    # Check for ambiguity: if multiple options have the same high score, return choices
-    if best_score >= 80:
-        # Count how many options have the same top score
-        top_count = sum(1 for s, _ in scored if s == best_score)
-        if top_count > 1:
-            # Ambiguous - multiple options with same score
-            return None, [o for s, o in scored if s == best_score][:6]
-        # Single clear winner
-        return best["value"], []
-
-    # If score < 80, or not ambiguous but not confident enough, return top matches
-    return None, [o for _, o in scored[:6]]
+    value=value.strip()
+    return {norm_place(k):v for k,v in COUNTRY_ONLY.items()}.get(norm_place(value),value.upper() if re.fullmatch(r"[a-z]{2,3}",value,re.I) else value)
 
 def location_choices(provider, value):
-    """
-    Resolve a location string to a Flightlist location code using the API.
-    Returns (resolved_value, choices_list). If choices_list is empty, resolved_value is the final code.
-    If choices_list is not empty, user needs to pick from choices.
-    """
+    """Resolve exact places; never choose a fuzzy hit without confirmation."""
     value = value.strip()
-    # Already a valid code?
-    if re.fullmatch(r"[A-Z]{2,3}", value) or re.fullmatch(r"city:[A-Z]{3}", value):
+    known = WIZARD_KNOWN.get(norm_place(value))
+    if known:
+        return known, []
+    if re.fullmatch(r"[A-Z]{2,3}|city:[A-Z]{3}", value):
         return value, []
-
-    # Normalize and check aliases - use alias as QUERY to provider (like old parser)
-    normalized = norm_place(value)
-    query = CITY_ALIASES.get(normalized, value)
-    try:
-        options = provider.locations(query)
-    except Exception as e:
-        raise ValueError(f"Błąd wyszukiwania lokalizacji: {e}")
-
+    query = CITY_ALIASES.get(norm_place(value), value)
+    options = provider.locations(query)
+    options = list({o["value"]: o for o in options if isinstance(o, dict)
+                    and isinstance(o.get("text"), str) and o["text"].strip()
+                    and isinstance(o.get("value"), str)
+                    and re.fullmatch(r"[A-Za-z0-9_,.:-]{2,100}", o["value"])}.values())
     if not options:
-        raise ValueError(f"Nie znalazłem miejsca „{value}”. Spróbuj wpisać pełniejszą nazwę (np. miasto, kraj, region).")
-
-    # Filter valid options
-    options = [o for o in options if re.fullmatch(r"[A-Za-z0-9_,.:-]{2,100}", o.get("value", ""))]
-    if not options:
-        raise ValueError(f"Nie znaleziono poprawnego kodu dla „{value}”.")
-
-    # Score matches using normalized query
-    query_norm = norm_place(query)
-    scored = []
-    for o in options:
-        text = o.get("text", "")
-        name = norm_place(re.split(r"[,(]", text)[0])
-        # Generate matching forms for Polish declension
-        forms = {name}
-        for suffix in ["a", "u", "y", "i", "e", "o", "ą", "ę"]:
-            forms.add(name + suffix)
+        raise ValueError(f"Nie znalazłem miejsca „{value}”. Wpisz nazwę bez odmiany, np. Wrocław, lub kod lotniska.")
+    def matches(option):
+        name = norm_place(re.split(r"[,(]", option["text"])[0])
+        forms = {name, *(name + suffix for suffix in ("a", "u", "y", "i", "e"))}
         if name.endswith("a"):
-            forms.update({name[:-1] + s for s in ["y", "i", "e", "o"]})
-        if name.endswith("ów"):
-            forms.add(name[:-2])
-        if name.endswith("ew"):
-            forms.add(name[:-2])
+            forms.update(name[:-1] + suffix for suffix in ("y", "i", "ii", "e"))
+        return norm_place(query) in forms
+    exact = [o for o in options if matches(o)]
+    cities = [o for o in exact if o.get("type") == "city"]
+    if len(cities) == 1:
+        return cities[0]["value"], []
+    if len(cities) > 1:
+        return None, cities[:6]
+    if len(exact) == 1:
+        return exact[0]["value"], []
+    return None, (exact or options)[:6]
 
-        # Check various matching strategies
-        score = 0
-        if query_norm == name:
-            score = 100
-        elif query_norm in forms:
-            score = 90
-        elif query_norm in norm_place(text):
-            score = 80
-        elif name.startswith(query_norm):
-            score = 70
-        elif query_norm.startswith(name):
-            score = 60
-        else:
-            # Fuzzy: check if query is contained in name or vice versa
-            if query_norm in name or name in query_norm:
-                score = 50
-
-        if score > 0:
-            # Prefer cities over airports, countries over regions
-            type_bonus = {"city": 10, "airport": 5, "country": 8, "region": 3, "continent": 2, "autonomous_territory": 1, "subdivision": 1}.get(o.get("type"), 0)
-            scored.append((score + type_bonus, o))
-
-    if not scored:
-        # Fallback: return first few options for user to choose
-        return None, options[:6]
-
-    scored.sort(key=lambda x: -x[0])
-    best = scored[0][1]
-    best_score = scored[0][0]
-
-    # Check for ambiguity: if multiple options have the same high score, return choices
-    if best_score >= 80:
-        # Count how many options have the same top score
-        top_count = sum(1 for s, _ in scored if s == best_score)
-        if top_count > 1:
-            # Ambiguous - multiple options with same score
-            return None, [o for s, o in scored if s == best_score][:6]
-        # Single clear winner
-        return best["value"], []
-
-    # If score < 80, or not ambiguous but not confident enough, return top matches
-    return None, [o for _, o in scored[:6]]
 
 def parse_command(text, provider=None):
     """
@@ -454,7 +329,7 @@ def parse_command(text, provider=None):
     command = parts[0].split("@")[0].lower()
 
     if command in ("/szukaj", "/obserwuj"):
-        if len(parts) < 3:
+        if not 3 <= len(parts) <= 8:
             raise ValueError(HELP)
         # /szukaj ORIGIN DEST [days] [budget] [stops] [currency] [nights_min-max]
         origin = parts[1]
@@ -495,226 +370,86 @@ def parse_command(text, provider=None):
     if command in ("/start", "/help", "pomoc") or text.lower().strip() in ("co dalej", "ok co dalej", "hej", "cześć", "czesc"):
         return "help", None
 
-    # --- Natural language parsing ---
-    low = " ".join(text.lower().strip().rstrip(".!?").split())
-
-    # Detect watch intent
-    is_watch = low.startswith("obserwuj") or low.startswith("obserwuję") or low.startswith("obserwuje")
-
-    # Remove watch prefix if present
-    if is_watch:
-        low = re.sub(r"^obserwuj[ęe]?\s+", "", low)
-
-    # Extract origin and destination - much more flexible
-    # Patterns: "z X do Y", "ze X do Y", "X do Y", "X -> Y", "X to Y"
-    origin = None
-    dest = None
-
-    # Try multiple patterns in order of specificity
-    patterns = [
-        # "z X do Y" / "ze X do Y" - most common Polish
-        r"\b(?:z|ze)\s+(.+?)\s+do\s+(.+?)(?=\s+(?:w|na|przez|następn|nastepn|najbliższ|najblizsz|do\s+\d|w\s+\d|pobyt|tam|bez|maks|max|z\s+bagażem|w\s+jedn)|[,$;]|$)",
-        # "X do Y" without z/ze
-        r"\b(.+?)\s+do\s+(.+?)(?=\s+(?:w|na|przez|następn|nastepn|najbliższ|najblizsz|do\s+\d|w\s+\d|pobyt|tam|bez|maks|max|z\s+bagażem|w\s+jedn)|[,$;]|$)",
-        # "X -> Y" or "X to Y"
-        r"\b(.+?)\s*(?:->|→|=>)\s*(.+?)(?=\s+(?:w|na|przez|następn|nastepn|najbliższ|najblizsz|do\s+\d|w\s+\d|pobyt|tam|bez|maks|max|z\s+bagażem|w\s+jedn)|[,$;]|$)",
-        # "X do Y" at end of string
-        r"\b(.+?)\s+do\s+(.+)$",
-    ]
-
-    for pattern in patterns:
-        m = re.search(pattern, low, re.IGNORECASE)
-        if m:
-            origin = m.group(1).strip(" ,;")
-            dest = m.group(2).strip(" ,;")
-            # Remove the matched part from tail
-            low = low[:m.start()] + " " + low[m.end():]
-            break
-
-    if not origin or not dest:
-        raise ValueError(
-            "Nie rozumiem, skąd i dokąd chcesz polecieć.\n"
-            "Przykłady: „z Warszawy do Manili”, „Polska → Filipiny”, "
-            "„z Niemiec do Tajlandii w przyszłym miesiącu”.\n" + HELP
-        )
-
-    # Clean up origin/dest - remove common noise words
-    noise_words = r"\b(najtańsze|najtansze|najtańszy|najtanszy|tanie|tani|loty|lotów|lotow|bilety|bilet|tanie)\b"
-    origin = re.sub(noise_words, "", origin, flags=re.IGNORECASE).strip(" ,;")
-    dest = re.sub(noise_words, "", dest, flags=re.IGNORECASE).strip(" ,;")
-
-    # Parse filters from remaining text
-    tail = low.strip(" ,;")
-
-    # Defaults
-    budget = ""
-    currency = "PLN"
-    stops = 4
-    nights_from = 0
-    nights_to = 0
-    days = 30
-    start = ""
-    end = ""
-
-    # --- Date range ---
-    # "w następnych N dniach/dni" / "na N dni" / "przez N dni"
-    date_match = re.search(
-        r"\b(?:w|na|przez)?\s*(?:następnych|nastepnych|najbliższych|najblizszych)?\s*(\d+)\s*(?:dniach|dni|dnie)\b",
-        tail, re.IGNORECASE
-    )
-    if date_match:
-        days = int(date_match.group(1))
-        tail = tail[:date_match.start()] + " " + tail[date_match.end():]
-
-    # "w przyszłym miesiącu" / "w najbliższym miesiącu"
-    month_match = re.search(
-        r"\bw\s+(?:następnym|nastepnym|przyszłym|przyszlym|najbliższym|najblizszym)\s+miesi[ąa]cu\b",
-        tail, re.IGNORECASE
-    )
-    if month_match:
-        if date_match:
-            raise ValueError("Podaj jeden okres: liczbę dni albo „w przyszłym miesiącu”.")
-        today = datetime.now(TZ).date()
-        a = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
-        b = (a.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        start, end = a.isoformat(), b.isoformat()
-        days = (b - a).days + 1
-        tail = tail[:month_match.start()] + " " + tail[month_match.end():]
-
-    # Specific date range: "od DD.MM do DD.MM" or "DD.MM-DD.MM"
-    date_range_match = re.search(
-        r"\bod\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)\s*(?:do|[-–])\s*(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)\b",
-        tail, re.IGNORECASE
-    )
-    if date_range_match:
-        try:
-            start = parse_flexible_date(date_range_match.group(1))
-            end = parse_flexible_date(date_range_match.group(2))
-            days = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
-            tail = tail[:date_range_match.start()] + " " + tail[date_range_match.end():]
-        except ValueError:
-            pass  # Ignore invalid dates
-
-    # --- Budget / Currency ---
-    # "do 500 USD" / "do 4000 PLN" / "do 300 EUR" / "do 500zł" / "do 500 zł"
-    budget_match = re.search(
-        r"\bdo\s+(\d+(?:[.,]\d{1,2})?)\s*(usd|pln|eur|zł|zl|€|\$)\b",
-        tail, re.IGNORECASE
-    )
-    if budget_match:
-        budget = budget_match.group(1).replace(",", ".")
-        curr = budget_match.group(2).upper()
-        currency = {"ZŁ": "PLN", "ZL": "PLN", "€": "EUR", "$": "USD"}.get(curr, curr)
-        tail = tail[:budget_match.start()] + " " + tail[budget_match.end():]
-    else:
-        # Just currency: "w USD" / "w PLN" / "w EUR"
-        curr_match = re.search(r"\bw\s+(usd|pln|eur)\b", tail, re.IGNORECASE)
-        if curr_match:
-            currency = curr_match.group(1).upper()
-            tail = tail[:curr_match.start()] + " " + tail[curr_match.end():]
-
-    # --- Stay duration (return flights) ---
-    # "pobyt 10-16 nocy" / "pobyt 7 nocy" / "10-16 nocy" / "na 10-16 nocy"
-    stay_match = re.search(
-        r"\b(?:pobyt|na)\s+(\d+)\s*[-–]\s*(\d+)\s*noc(?:y|e|ą|i)?\b",
-        tail, re.IGNORECASE
-    )
-    if not stay_match:
-        # Single number: "pobyt 7 nocy"
-        stay_match = re.search(
-            r"\bpobyt\s+(\d+)\s*noc(?:y|e|ą|i)?\b",
-            tail, re.IGNORECASE
-        )
-        if stay_match:
-            nights_from = nights_to = int(stay_match.group(1))
-            tail = tail[:stay_match.start()] + " " + tail[stay_match.end():]
-    if stay_match and stay_match.lastindex == 2:
-        nights_from, nights_to = map(int, stay_match.groups())
-        if min(nights_from, nights_to) < 1:
+    # Extract supported filters before the route: date/budget "do" is not a destination.
+    low = " ".join(text.casefold().strip().rstrip(".!?").split())
+    is_watch = bool(re.match(r"^(?:proszę |prosze )?obserwuj(?:ę|e)?\b", low))
+    low = re.sub(r"^(?:proszę |prosze )?obserwuj(?:ę|e)?\s+", "", low)
+    values = dict(days=30, budget="", currency="PLN", stops=4, start="", end="",
+                  nights_from=0, nights_to=0)
+    def extract(pattern):
+        nonlocal low
+        found = list(re.finditer(pattern, low))
+        if len(found) > 1:
+            raise ValueError("Podaj jeden zakres lub jedną wartość każdego filtra.")
+        if not found:
+            return None
+        match = found[0]
+        low = low[:match.start()] + " " + low[match.end():]
+        return match
+    day = r"(?:\d{4}-\d{2}-\d{2}|\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)"
+    dates = extract(r"\bod\s+(" + day + r")\s+(?:do|[-–])\s+(" + day + r")(?![\d./-])")
+    period = extract(r"\b(?:w\s+)?(?:następnych|nastepnych|najbliższych|najblizszych)\s+(\d+)\s+(?:dniach|dni)\b")
+    month = extract(r"\bw\s+(?:następnym|nastepnym|przyszłym|przyszlym)\s+miesi[ąa]cu\b")
+    month_names = ["styczniu", "lutym", "marcu", "kwietniu", "maju", "czerwcu", "lipcu", "sierpniu", "wrześniu", "październiku", "listopadzie", "grudniu"]
+    named = extract(r"\bw\s+(" + "|".join(month_names) + r")(?:\s+(20\d{2}))?\b")
+    if sum(bool(x) for x in (dates, period, month, named)) > 1:
+        raise ValueError("Podaj jeden okres wylotu: daty, miesiąc albo następne N dni.")
+    today = datetime.now(TZ).date()
+    if dates:
+        values["start"], values["end"] = parse_date_range(dates[1] + " – " + dates[2], today)
+    elif period:
+        values["days"] = int(period[1])
+    elif month:
+        values["start"], values["end"] = next_month(today)
+    elif named:
+        number = month_names.index(named[1]) + 1
+        year = int(named[2]) if named[2] else today.year + (number < today.month)
+        first = date(year, number, 1)
+        last = (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        if last < today:
+            raise ValueError("Wybrany miesiąc jest w przeszłości.")
+        values["start"], values["end"] = max(first, today).isoformat(), last.isoformat()
+    stay = extract(r"\b(?:pobyt|na)\s+(\d+)(?:\s*[-–]\s*(\d+))?\s+(nocy|noce|noc|dni)\b")
+    if stay:
+        if stay[3] == "dni":
+            raise ValueError("„Na N dni” oznacza długość pobytu czy termin wylotu? Napisz „pobyt N nocy” albo „w następnych N dniach”.")
+        values["nights_from"] = int(stay[1])
+        values["nights_to"] = int(stay[2] or stay[1])
+        if values["nights_from"] < 1:
             raise ValueError("Pobyt musi wynosić przynajmniej 1 noc.")
-        tail = tail[:stay_match.start()] + " " + tail[stay_match.end():]
-
-    # --- Stops ---
-    # "bez przesiadek" / "bez przesiadki" / "direct"
-    if re.search(r"\bbez\s+przesiad(?:ek|ki)\b", tail, re.IGNORECASE):
-        stops = 0
-        tail = re.sub(r"\bbez\s+przesiad(?:ek|ki)\b", " ", tail, flags=re.IGNORECASE)
-    else:
-        # "maks 2 przesiadki" / "max 1 przesiadka" / "maksymalnie 3 przesiadki"
-        stops_match = re.search(
-            r"\b(?:maksymalnie|maks\.?|max\.?)\s+(\d+)\s*przesiad(?:ka|ki|ek|kę)\b",
-            tail, re.IGNORECASE
-        )
-        if stops_match:
-            stops = int(stops_match.group(1))
-            tail = tail[:stops_match.start()] + " " + tail[stops_match.end():]
-
-    # --- Round trip vs one way ---
-    is_return = False
-    if re.search(r"\b(?:tam\s+i\s+z\s+powrotem|tam\si\sz\s+powrotem|w\s+obie\s+strony|return|round\s*trip)\b", tail, re.IGNORECASE):
-        is_return = True
-        tail = re.sub(r"\b(?:tam\s+i\s+z\s+powrotem|tam\si\sz\s+powrotem|w\s+obie\s+strony|return|round\s*trip)\b", " ", tail, flags=re.IGNORECASE)
-
-    # If "tam i z powrotem" was specified, require "pobyt" (stay duration)
-    if is_return and nights_from == 0:
+    budget = extract(r"\b(?:do|budżet|budzet)\s+(\d+(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?)\s*(pln|usd|eur|zł|zl|€|\$)(?!\w)")
+    currency = extract(r"\bw\s+(pln|usd|eur)\b")
+    if budget:
+        values["budget"] = budget[1].replace(" ", "").replace("\u00a0", "").replace(",", ".")
+        values["currency"] = {"zł":"PLN", "zl":"PLN", "€":"EUR", "$":"USD"}.get(budget[2], budget[2].upper())
+    if currency:
+        if budget and currency[1].upper() != values["currency"]:
+            raise ValueError("Waluta budżetu różni się od waluty wyników.")
+        values["currency"] = currency[1].upper()
+    direct = extract(r"\b(?:bez\s+przesiad(?:ek|ki)|bezpośredni(?:o|e)?|bezposredni(?:o|e)?|direct)\b")
+    stops = extract(r"\b(?:maksymalnie|maks\.?|max\.?)\s+(\d+)\s+przesiad(?:ka|ki|ek|kę)\b")
+    if direct and stops and int(stops[1]) != 0:
+        raise ValueError("Wybierz lot bezpośredni albo maksymalną liczbę przesiadek.")
+    values["stops"] = 0 if direct else int(stops[1]) if stops else 4
+    returning = extract(r"\b(?:tam\s+i\s+z\s+powrotem|w\s+obie\s+strony|return|round\s*trip)\b")
+    oneway = extract(r"\b(?:w\s+jedn[ąa]\s+stron[ęe]|one\s*way|tylko\s+tam)\b")
+    if oneway and (returning or stay):
+        raise ValueError("Wybierz: jedną stronę albo pobyt z powrotem.")
+    if returning and not stay:
         raise ValueError("Na ile nocy chcesz polecieć? Dopisz np. „pobyt 10-16 nocy”.")
+    # Remove only known conversational framing, never unknown requirements.
+    noise = r"\b(?:najtańsze|najtansze|najtańszy|najtanszy|tanie|tani|loty|lotów|lotow|bilety|bilet|szukaj|wyszukaj|pokaż|pokaz|znajdź|znajdz|proszę|prosze|chcę|chce|chciałbym|chcialbym|czy|możesz|mozesz|mi)\b"
+    low = " ".join(re.sub(noise, " ", low).split()).strip(" ,;")
+    route = re.fullmatch(r"(?:(?:z|ze)\s+)?(.+?)\s*(?:\sdo\s|->|→|=>|\sto\s)\s*(.+)", low)
+    if not route:
+        raise ValueError("Nie rozumiem, skąd i dokąd chcesz polecieć. Przykłady: „z Warszawy do Manili”, „Polska → Filipiny”. Użyj /kreator, aby wybrać filtry.")
+    origin, dest = (" ".join(x.split()).strip(" ,;") for x in route.groups())
+    for value in (origin, dest):
+        if re.search(r"\d|[,;]|\b(?:z|ze|do|od|w|na|bez|maks|max|pobyt|bagażem|bagazem)\b", value):
+            raise ValueError("Nie rozpoznaję wszystkich filtrów. Nie pomijam ich: użyj /kreator albo podaj np. „z Polski do Filipin w następnych 30 dniach do 3000 PLN”. Dodatkowy bagaż nie jest obsługiwany.")
+    return ("watch" if is_watch else "search"), NaturalSearch(
+        origin=resolve_place(origin), destination=resolve_place(dest), **values)
 
-    if re.search(r"\b(?:w\s+jedn[ąa]\s+stron[ęe]|one\s*way|tylko\s+tam)\b", tail, re.IGNORECASE):
-        if is_return or nights_from > 0:
-            raise ValueError("Wybierz: jedną stronę LUB pobyt z powrotem.")
-        tail = re.sub(r"\b(?:w\s+jedn[ąa]\s+stron[ęe]|one\s*way|tylko\s+tam)\b", " ", tail, flags=re.IGNORECASE)
-
-    # If user specified stay but didn't say "tam i z powrotem", assume return
-    if nights_from > 0 and not is_return:
-        is_return = True
-
-    # --- Remove remaining noise words ---
-    tail = re.sub(r"\b(najtańsze|najtansze|najtańszy|najtanszy|tanie|tani|loty|lotów|lotow|bilety|bilet|szukaj|wyszukaj|pokaż|pokaz|znajdź|znajdz|proszę|prosze|chcę|chce|chciałbym|chcialbym|czy|możesz|mozesz|mi)\b", " ", tail, flags=re.IGNORECASE)
-    tail = re.sub(r"\s+", " ", tail).strip(" ,;")
-
-    # If there's still unparsed text, warn but don't fail - just log it
-    unparsed_warning = ""
-    if tail:
-        unparsed_warning = f"\n⚠️ Nie rozpoznano część: „{tail}”. Ignoruję."
-
-    # Resolve locations through Flightlist API (if provider available)
-    # For now, return NaturalSearch with raw names - resolution happens in Bot.request_reply
-    spec = NaturalSearch(
-        origin=resolve_place(origin),
-        destination=resolve_place(dest),
-        days=days,
-        budget=budget,
-        stops=stops,
-        start=start,
-        end=end,
-        currency=currency,
-        nights_from=nights_from if is_return else 0,
-        nights_to=nights_to if is_return else 0,
-    )
-
-    action = "watch" if is_watch else "search"
-    return action, spec
-
-
-def parse_flexible_date(s):
-    """Parse date in various formats: DD.MM, DD.MM.YYYY, DD/MM, DD/MM/YYYY, YYYY-MM-DD"""
-    s = s.strip().replace("/", ".")
-    parts = s.split(".")
-    if len(parts) == 2:
-        d, m = map(int, parts)
-        y = datetime.now(TZ).year
-        # If date already passed this year, assume next year
-        if date(y, m, d) < datetime.now(TZ).date():
-            y += 1
-        return date(y, m, d).isoformat()
-    elif len(parts) == 3:
-        d, m, y = map(int, parts)
-        if y < 100:
-            y += 2000
-        return date(y, m, d).isoformat()
-    else:
-        # Try ISO format
-        return date.fromisoformat(s).isoformat()
 
 def describe_search(spec):
     trip=f"tam i z powrotem · {spec.nights_from}–{spec.nights_to} nocy" if spec.nights_from else "jedna strona"
@@ -762,6 +497,7 @@ class Store:
         row=self.db.execute("SELECT data FROM wizards WHERE owner=? AND expires>=?",(owner,int(time.time()))).fetchone()
         return json.loads(row[0]) if row else None
     def wizard_set(self,owner,data):
+        data["token"]=secrets.token_hex(6)
         with self.db:self.db.execute("INSERT OR REPLACE INTO wizards VALUES(?,?,?)",(owner,json.dumps(data),int(time.time())+86400))
     def wizard_clear(self,owner):
         with self.db:self.db.execute("DELETE FROM wizards WHERE owner=?",(owner,))
@@ -909,21 +645,41 @@ def next_month(today=None):
     last=(first+timedelta(days=32)).replace(day=1)-timedelta(days=1)
     return first.isoformat(),last.isoformat()
 
-def parse_date_range(text,today=None):
-    today=today or datetime.now(TZ).date()
-    m=re.fullmatch(r"\s*(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)\s*[-–]\s*(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)\s*",text)
-    if not m:raise ValueError("Wpisz daty jako od-do, np. 10.12-20.12 albo 10.12.2026-05.01.2027.")
-    try:start,end=(date.fromisoformat(parse_flexible_date(x)) for x in m.groups())
-    except ValueError:raise ValueError("Nieprawidłowa data. Przykład: 10.12-20.12.") from None
-    if end<start and not re.search(r"\d[./]\d{2,4}$",m[2]):end=end.replace(year=end.year+1)
-    if start<today:raise ValueError("Data wylotu jest w przeszłości.")
-    if end<start or (end-start).days>179:raise ValueError("Zakres dat: koniec po początku, maks. 180 dni.")
-    return start.isoformat(),end.isoformat()
+def parse_date_range(text, today=None):
+    today = today or datetime.now(TZ).date()
+    token = r"(?:\d{4}-\d{2}-\d{2}|\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)"
+    match = re.fullmatch(r"\s*(" + token + r")\s*[-–]\s*(" + token + r")\s*", text)
+    if not match:
+        raise ValueError("Wpisz daty jako od-do, np. 10.12-20.12 albo 10.12.2026-05.01.2027.")
+    def parse(value, year):
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return date.fromisoformat(value), True
+        parts = value.replace("/", ".").split(".")
+        explicit = len(parts) == 3
+        y = int(parts[2]) if explicit else year
+        if explicit and y < 100:
+            y += 2000
+        return date(y, int(parts[1]), int(parts[0])), explicit
+    try:
+        start, explicit = parse(match[1], today.year)
+        if not explicit and start < today:
+            start, _ = parse(match[1], today.year + 1)
+        end, explicit_end = parse(match[2], start.year)
+        if not explicit_end and end < start:
+            end, _ = parse(match[2], start.year + 1)
+    except ValueError:
+        raise ValueError("Nieprawidłowa data. Przykład: 10.12-20.12.") from None
+    if start < today:
+        raise ValueError("Data wylotu jest w przeszłości.")
+    if end < start or (end-start).days > 179:
+        raise ValueError("Zakres dat: koniec po początku, maks. 180 dni.")
+    return start.isoformat(), end.isoformat()
+
 
 def looks_like_sentence(text):
     low=text.casefold()
     return bool(re.match(r"(loty|lot|wyszukaj|szukaj|pokaż|pokaz|znajdź|znajdz|najtańsze|najtansze|obserwuj)\b",low)
-                or re.search(r"\b(z|ze)\s+\S+.*\bdo\s+\S+",low))
+                or re.search(r"(?:\sdo\s|->|→|=>|\sto\s)",low))
 
 class Bot:
     def __init__(self,provider,store): self.provider,self.store=provider,store
@@ -962,6 +718,11 @@ class Bot:
                   [button("✏️ Skąd","wz:ed:origin"),button("✏️ Dokąd","wz:ed:destination"),button("✏️ Kiedy","wz:ed:when")],
                   [button("✏️ Typ/pobyt","wz:ed:trip"),button("✏️ Przesiadki","wz:ed:stops"),button("✏️ Budżet","wz:ed:budget")]]
             nav=[nav[1]]
+        token=data.get("token", "")
+        for row in rows+[nav]:
+            for item in row:
+                if token and item.get("callback_data", "").startswith("wz:"):
+                    item["callback_data"]="wz:"+token+":"+item["callback_data"][3:]
         reply=Reply((note+"\n\n" if note else "")+text,keyboard(*rows,nav));reply.edit=True
         return reply
     def wizard_start(self,owner,data=None):
@@ -1001,9 +762,16 @@ class Bot:
         data["step"]=wizard_next(data,field)
     def wizard_callback(self,owner,value):
         data=self.store.wizard_get(owner)
+        token, sep, command = value.partition(":")
+        if sep and re.fullmatch(r"[a-f0-9]{12}",token):
+            if not data or not secrets.compare_digest(token,data.get("token","")):
+                return Reply("Ten przycisk pochodzi ze starszego kroku. Użyj najnowszej wiadomości lub /kreator.")
+            value=command
         if value=="new" or (data is None and value=="edit"):return self.wizard_start(owner)
         if data is None:return Reply("Kreator wygasł. Zacznij od nowa.",keyboard([button("🧭 Nowe wyszukiwanie","wz:new")]))
         if value=="edit":
+            if data["step"] != "summary":
+                return Reply("Najpierw dokończ aktualny kreator albo użyj /kreator.")
             data.update(step="summary",edit=True,choices=[]);return self.wizard_start(owner,data)
         if value=="x":
             self.store.wizard_clear(owner)
@@ -1016,20 +784,25 @@ class Bot:
             elif value.startswith("ed:"):
                 step=value[3:]
                 if step not in WIZARD_STEPS[:-1]:raise ValueError("Nieznany krok.")
+                if data["step"] != "summary":raise ValueError("Najpierw dokończ aktualny krok.")
                 data.update(step=step,edit=True,choices=[])
-                if step=="trip":data["nights_from"]=data["nights_to"]=0
             elif value.startswith("pick:"):
-                choice=data["choices"][int(value[5:])]
+                index=int(value[5:])
+                if data["step"] not in ("origin","destination") or not 0<=index<len(data["choices"]):
+                    raise ValueError("Nieaktualny wybór miejsca.")
+                choice=data["choices"][index]
                 self.wizard_place(data,data["step"],choice["value"],choice["text"][:120])
             elif value=="go":
+                if data["step"] != "summary":raise ValueError("Najpierw dokończ wszystkie kroki kreatora.")
                 spec=wizard_spec(data);result=self.provider.search(spec)
                 data["edit"]=True;self.store.wizard_set(owner,data)
                 reply=self.results_reply(owner,spec,result)
-                reply.markup["inline_keyboard"].insert(1,[button("🔁 Zmień filtry","wz:edit")]);reply.edit=True
+                reply.markup["inline_keyboard"].insert(1,[button("🔁 Zmień filtry","wz:"+data["token"]+":edit")]);reply.edit=True
                 return reply
             else:
                 field,_,arg=value.partition(":")
                 if field not in WIZARD_FIELDS:raise ValueError("Nieznany przycisk.")
+                if WIZARD_FIELDS[field] != data["step"]:raise ValueError("Nieaktualny przycisk. Użyj bieżącego kroku.")
                 self.wizard_set(data,WIZARD_FIELDS[field],arg)
         except (ValueError,IndexError,ArithmeticError,ProviderError) as e:note="⚠️ "+str(e)
         self.store.wizard_set(owner,data)
@@ -1055,7 +828,10 @@ class Bot:
         fields=asdict(spec)
         for field in ("origin","destination"):
             value=fields[field]
-            resolved,choices=location_choices(self.provider,value)
+            if fields.get(field+"_name"):
+                resolved,choices=value,[]
+            else:
+                resolved,choices=location_choices(self.provider,value)
             if choices:
                 pending=NaturalSearch(**fields)
                 token=self.store.place_request(owner,pending,intent,field,choices)
@@ -1118,6 +894,8 @@ class Bot:
             if wizard and wizard["step"] in WIZARD_TEXT_STEPS and not text.startswith("/") and not looks_like_sentence(text):
                 return self.wizard_text(owner,wizard,text)
             action,arg=parse_command(text, self.provider)
+            if wizard and action in ("search","watch"):
+                self.store.wizard_clear(owner)
             if action=="wizard":return self.wizard_start(owner)
             if action=="help":return Reply(HELP,keyboard([button("🧭 Kreator wyszukiwania","wz:new")],[button("📋 Moje obserwacje","list")]))
             if action=="locations":
@@ -1149,6 +927,8 @@ class Telegram:
         except Exception:
             # Never log exceptions containing the token-bearing URL.
             raise RuntimeError("Błąd transportu Telegram; wiadomości pozostają w kolejce.") from None
+        if not isinstance(result,dict) or "ok" not in result or (result.get("ok") and "result" not in result):
+            raise RuntimeError("Nieprawidłowa odpowiedź Telegram; ponowienie później.")
         if not result.get("ok"):
             if result.get("error_code")==429:raise RuntimeError("Telegram: limit zapytań; ponowienie później.")
             raise TelegramRejected(result.get("description",""))

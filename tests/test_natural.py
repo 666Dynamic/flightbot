@@ -12,7 +12,7 @@ class Provider:
         self.queries.append(term)
         return {
             "Warsaw":[{"value":"city:WAW","text":"Warsaw (WAW), Poland","type":"city"},{"value":"WAW","text":"Warsaw Chopin (WAW), Poland","type":"airport"}],
-            "gdańska":[{"value":"city:GDN","text":"Gdańsk (GDN), Poland","type":"city"},{"value":"GDN","text":"Gdańsk Lech Wałęsa (GDN), Poland","type":"airport"}],
+            "Gdańsk":[{"value":"city:GDN","text":"Gdańsk (GDN), Poland","type":"city"},{"value":"GDN","text":"Gdańsk Lech Wałęsa (GDN), Poland","type":"airport"}],
             "hamburga":[{"value":"HH_DE","text":"Hamburg, Germany","type":"subdivision"},{"value":"city:HAM","text":"Hamburg (HAM), Germany","type":"city"},{"value":"HAM","text":"Hamburg (HAM), Germany","type":"airport"}],
             "manili":[{"value":"city:MNL","text":"Manila (MNL), Philippines","type":"city"},{"value":"city:MII","text":"Marília (MII), Brazil","type":"city"}],
             "santiago":[{"value":"city:SCL","text":"Santiago (SCL), Chile","type":"city"},{"value":"city:SCQ","text":"Santiago (SCQ), Spain","type":"city"}],
@@ -51,11 +51,9 @@ class NaturalTests(unittest.TestCase):
         r=self.b.handle("42","loty z Polski do Nigdziowa")
         self.assertIn("Nie znalazłem",r);self.assertEqual(self.p.searched,[])
     def test_unknown_filter_not_silently_dropped(self):
-        # Unknown filters like "z bagażem" are now ignored (lenient parsing)
         r=self.b.handle("42","loty z Polski do Filipin z bagażem")
-        self.assertNotEqual(self.p.searched, [])  # Search should happen
-        # The response should contain results, not an error
-        self.assertIn("Polska → Filipiny", r)
+        self.assertEqual(self.p.searched, [])
+        self.assertIn("bagaż",r)
     def test_next_month(self):
         _,s=parse_command("loty z Polski do Filipin w przyszłym miesiącu")
         self.assertTrue(s.start.endswith("-01"));self.assertTrue(s.end)

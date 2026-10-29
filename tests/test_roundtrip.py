@@ -37,11 +37,8 @@ class RoundtripTests(unittest.TestCase):
         _,s=parse_command("pokaż loty z Polski do Tajlandii w następnych 30 dniach do 4000 zł, tam i z powrotem, pobyt 10-16 nocy, maksymalnie 1 przesiadka")
         self.assertEqual((s.currency,s.stops,s.nights_to),("PLN",1,16))
     def test_reject_unparsed_filters(self):
-        # "z bagażem" is now silently ignored (lenient parsing) - no error, search proceeds
-        _, s = parse_command("pokaż loty z Polski do Tajlandii w następnych 30 dniach z bagażem")
-        self.assertIs(type(s), NaturalSearch)
-        # "tam i z powrotem" without "pobyt" should still raise error
-        with self.assertRaises(ValueError): parse_command("pokaż loty z Polski do Tajlandii w następnych 30 dniach tam i z powrotem")
+        with self.assertRaises(ValueError):parse_command("pokaż loty z Polski do Tajlandii w następnych 30 dniach z bagażem")
+        with self.assertRaises(ValueError):parse_command("pokaż loty z Polski do Tajlandii w następnych 30 dniach tam i z powrotem")
     def test_invalid_stay_currency(self):
         for kw in ({"currency":"GBP"},{"nights_from":10},{"nights_from":16,"nights_to":10},{"nights_from":1,"nights_to":91}):
             with self.assertRaises(ValueError):Search("PL","TH",**kw)

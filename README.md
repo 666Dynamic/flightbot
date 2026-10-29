@@ -1,4 +1,4 @@
-# Flightbot — działająca wersja lokalna
+# Flightbot — Telegram i Flightlist
 
 Bot Telegram z wyszukiwaniem i obserwacjami Flightlist. Python 3.9+, biblioteka standardowa. Kod starego monitora Rainbow nie został zmieniony.
 
@@ -49,7 +49,7 @@ Dla już skonfigurowanego bota: `python3 connect.py run`. Nie uruchamiaj drugieg
 
 Token, identyfikator dozwolonego czatu, baza i log są w `work/flightbot-runtime/` poza pakietem kodu. Uprawnienia folderu: 700; konfiguracji i bazy: 600. Kopia bazy sprzed aktualizacji: `before-v2.sqlite3` w tym samym folderze. Te pliki nie są dołączane do ZIP. `bot.pid` wskazuje uruchomiony proces; launcher korzysta z blokady plikowej.
 
-Usługa działa lokalnie. Uśpienie/wyłączenie komputera przerywa działanie. Nie zainstalowano autostartu ani hostingu całodobowego. Zamknięcie samego Safari nie przerywa pracy procesu uruchomionego w tle.
+Wdrożenie opisane w `deploy/README.md` korzysta z systemd na serwerze Oracle. Nie uruchamiaj lokalnego pollera równolegle z serwerem. Sama lokalna wersja zatrzyma obsługę po uśpieniu/wyłączeniu komputera. Stan działającej usługi należy sprawdzać na serwerze; plik `bot.pid` nie jest potwierdzeniem działania.
 
 ## Testy bez sieci i Telegrama
 
@@ -82,8 +82,17 @@ Niezależnie od testów: gotowy adapter pobrał 100 ofert powrotnych PL → TH z
 
 Przyciski obserwacji, ręcznego sprawdzania, usuwania i przywracania zostały sprawdzone na żywo w Safari. Dodatkowy monitor testowy wyłączono; pierwotny #1 pozostał aktywny.
 
-Kolejny etap: wybór filtrów krok po kroku oraz przeniesienie usługi na dostępny serwer dla pracy całodobowej.
+Kreator i konfiguracja systemd zostały dodane 28.10.2026. Historyczne testy poniżej nie potwierdzają bieżącego stanu usługi.
 
 Naturalne wyszukiwanie zweryfikowano na żywym adapterze dla PL → PH, Warszawa → Manila i Gdańsk → Hamburg; każda trasa zwróciła 100 ofert. Zapis: `live-natural-test.json`.
 
 W Safari/Telegram potwierdzono odpowiedzi na zwykłe zdania Warszawa → Manila (pierwsza oferta 1332 PLN) i Gdańsk → Hamburg (105 PLN), bez kodów i dat. Zrzuty w katalogu nadrzędnym `outputs/`. Ceny z czasu testu, bez gwarancji utrzymania.
+
+## Poprawki przeglądu 29.10.2026
+
+- Nazwy miejsc i ich polskie odmiany są normalizowane; luźne dopasowanie (np. York → New York) wymaga wyboru zamiast automatycznej zmiany celu. Wybór regionu zachowuje identyfikator źródła.
+- Filtry są rozpoznawane przed trasą, więc „od 20.12 do 05.01” nie trafia do nazwy celu. Daty bez roku przechodzą przez granicę roku względem początku zakresu. Obsługiwane są też daty ISO, „w listopadzie 2027”, „bezpośrednio”, kwoty „4 000,50 zł”, symbole €/$.
+- „Na 7 dni” wymaga doprecyzowania: termin wylotu to „w następnych 7 dniach”, długość pobytu to „pobyt 7 nocy”. Nierozpoznane wymagania (np. bagaż, liczba osób) nie są pomijane. Bot nie jest pełnym asystentem konwersacyjnym.
+- Nowe zapytanie „Polska → Filipiny” kończy poprzedni kreator. Przyciski nowych kreatorów mają identyfikator aktualnego kroku; starsze wiadomości nie zmieniają nowej sesji. Ujemny indeks miejsca, pomijanie kroków i wyszukiwanie niekompletnego formularza są odrzucane.
+- Błędna odpowiedź API lokalizacji daje kontrolowany komunikat; dodatkowe argumenty komend nie są ignorowane.
+- Walidacja: 114 testów offline; dodatkowe wyniki sprawdzenia żywych lokalizacji i zakres audytu opisano w `REVIEW-2026-10-29.md`. Zmiany wymagają wdrożenia na serwerze. Nie potwierdzono nowej wersji w Telegramie ani bieżącego statusu serwera.
